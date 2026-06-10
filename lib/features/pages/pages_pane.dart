@@ -45,16 +45,16 @@ class PagesPane extends ConsumerWidget {
     final pagesAsync = ref.watch(pagesProvider(activeSectionId));
     final activePageId = ref.watch(activePageProvider);
 
-    ref.listen<AsyncValue<List<PageListEntry>>>(
-      pagesProvider(activeSectionId),
-      (previous, next) {
-        if (next.hasValue &&
-            next.value!.isNotEmpty &&
-            ref.read(activePageProvider) == null) {
-          ref.read(activePageProvider.notifier).select(next.value!.first.id);
+    if (pagesAsync.hasValue &&
+        pagesAsync.value!.isNotEmpty &&
+        activePageId == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        // Double check activePageProvider hasn't changed before updating
+        if (ref.read(activePageProvider) == null) {
+          ref.read(activePageProvider.notifier).select(pagesAsync.value!.first.id);
         }
-      },
-    );
+      });
+    }
     return Container(
       width: paneWidth,
       color: colors.surfacePanel,
@@ -203,10 +203,29 @@ class _PageItem extends ConsumerWidget {
             ).then((value) {
               if (!context.mounted) return;
               if (value == 'delete') {
-                ref.read(repositoryProvider).softDeletePage(page.id);
+                final repo = ref.read(repositoryProvider);
+                repo.softDeletePage(page.id);
                 if (isSelected) {
                   ref.read(activePageProvider.notifier).select(null);
                 }
+                ScaffoldMessenger.of(context).clearSnackBars();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Page "${page.title}" deleted', style: TextStyle(color: colors.inkPrimary)),
+                    backgroundColor: colors.surfacePanel,
+                    action: SnackBarAction(
+                      label: 'Undo',
+                      textColor: colors.accent,
+                      onPressed: () {
+                        repo.restorePage(page.id);
+                      },
+                    ),
+                    behavior: SnackBarBehavior.floating,
+                    margin: const EdgeInsets.all(AppSpacing.md),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    duration: const Duration(seconds: 5),
+                  ),
+                );
               }
             });
           },

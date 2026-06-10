@@ -43,13 +43,18 @@ class SheepRepository {
 
   Future<Section> createSection(String title) async {
     final count = await _db.sections.count().getSingle();
+    final sectionId = _uuid.v4();
     final section = SectionsCompanion.insert(
-      id: _uuid.v4(),
+      id: sectionId,
       title: title,
       orderIndex: count,
     );
     await _db.into(_db.sections).insert(section);
-    return (await getSection(section.id.value))!;
+    
+    // Auto-create initial page
+    await createPage(sectionId, 'Title');
+    
+    return (await getSection(sectionId))!;
   }
 
   Future<void> updateSectionTitle(String id, String title) {
@@ -189,6 +194,16 @@ class SheepRepository {
       'DELETE FROM pages_search WHERE page_id = ?',
       [id],
     );
+  }
+
+  Future<void> restorePage(String id) async {
+    await (_db.update(_db.pages)..where((p) => p.id.equals(id)))
+        .write(const PagesCompanion(isDeleted: Value(false)));
+        
+    final page = await getPage(id);
+    if (page != null) {
+      await _syncFts(id, page.title, _extractPlainText(page.contentJson));
+    }
   }
 
   // ── Preferences ──────────────────────────────────────────

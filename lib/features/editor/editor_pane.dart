@@ -10,6 +10,7 @@ import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../layout/providers.dart';
 import '../pages/providers.dart';
+import '../sections/providers.dart';
 import 'providers.dart';
 
 class EditorPane extends ConsumerStatefulWidget {
@@ -110,96 +111,105 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
   Widget build(BuildContext context) {
     final colors = AppTheme.colorsOf(context);
     final activePageId = ref.watch(activePageProvider);
+    final activeSectionId = ref.watch(activeSectionProvider);
+
+    Widget contentChild;
 
     if (activePageId == null) {
-      return Container(
-        color: colors.surfaceBase,
-        child: Column(
-          children: [
-            _TopBar(colors: colors, editorState: null),
-            const Expanded(child: Center(child: _Placeholder())),
-          ],
+      final hasPages = activeSectionId != null &&
+          (ref.watch(pagesProvider(activeSectionId)).value?.isNotEmpty ?? false);
+
+      contentChild = Center(
+        key: const ValueKey('empty_state'),
+        child: _Placeholder(hasPages: hasPages),
+      );
+    } else {
+      final fullPageAsync = ref.watch(fullPageProvider(activePageId));
+
+      contentChild = Container(
+        key: ValueKey(activePageId),
+        child: fullPageAsync.when(
+          data: (page) {
+            if (page == null) return const Center(child: Text('Page not found'));
+
+            if (_currentlyLoadedPageId != page.id) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _initEditorState(page);
+              });
+              return const Center(child: _DelayedLoader());
+            }
+
+            if (_editorState == null) {
+              return const Center(child: _DelayedLoader());
+            }
+
+            return AppFlowyEditor(
+              editorState: _editorState!,
+              blockComponentBuilders: {
+                ...standardBlockComponentBuilderMap,
+                'title': HeadingBlockComponentBuilder(
+                  textStyleBuilder: (level) => GoogleFonts.merriweather(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    color: colors.accent,
+                  ),
+                ),
+              },
+              editorStyle: EditorStyle.desktop(
+                cursorColor: colors.accent,
+                selectionColor: colors.accent.withValues(alpha: 0.2),
+                textStyleConfiguration: TextStyleConfiguration(
+                  text: GoogleFonts.inter(
+                    fontSize: 16,
+                    color: colors.inkPrimary,
+                  ),
+                  code: GoogleFonts.jetBrainsMono(
+                    color: colors.inkPrimary,
+                    backgroundColor: colors.surfacePanel,
+                  ),
+                ),
+              ),
+              characterShortcutEvents: [
+                ...standardCharacterShortcutEvents.where((e) => e != slashCommand),
+                customSlashCommand(
+                  standardSelectionMenuItems,
+                  style: SelectionMenuStyle(
+                    selectionMenuBackgroundColor: colors.surfacePanel,
+                    selectionMenuItemTextColor: colors.inkPrimary,
+                    selectionMenuItemIconColor: colors.inkPrimary,
+                    selectionMenuItemSelectedTextColor: colors.accent,
+                    selectionMenuItemSelectedIconColor: colors.accent,
+                    selectionMenuItemSelectedColor: Colors.transparent,
+                    selectionMenuUnselectedLabelColor: colors.inkMuted,
+                    selectionMenuDividerColor: colors.border,
+                    selectionMenuLinkBorderColor: colors.border,
+                    selectionMenuInvalidLinkColor: Colors.red,
+                    selectionMenuButtonColor: colors.accent,
+                    selectionMenuButtonTextColor: colors.surfaceBase,
+                    selectionMenuButtonIconColor: colors.surfaceBase,
+                    selectionMenuButtonBorderColor: colors.accent,
+                    selectionMenuTabIndicatorColor: colors.accent,
+                  ),
+                ),
+              ],
+              contextMenuBuilder: (context, position, editorState, onPressed) => const SizedBox.shrink(),
+            );
+          },
+          loading: () => const Center(child: _DelayedLoader()),
+          error: (err, stack) => Center(child: Text('Error: $err')),
         ),
       );
     }
-
-    final fullPageAsync = ref.watch(fullPageProvider(activePageId));
 
     return Container(
       color: colors.surfaceBase,
       child: Column(
         children: [
-          _TopBar(colors: colors, editorState: _editorState),
+          _TopBar(colors: colors, editorState: activePageId == null ? null : _editorState),
           Expanded(
-            child: fullPageAsync.when(
-              data: (page) {
-                if (page == null) return const Center(child: Text('Page not found'));
-
-                if (_currentlyLoadedPageId != page.id) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    _initEditorState(page);
-                  });
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                if (_editorState == null) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                return AppFlowyEditor(
-                  editorState: _editorState!,
-                  blockComponentBuilders: {
-                    ...standardBlockComponentBuilderMap,
-                    'title': HeadingBlockComponentBuilder(
-                      textStyleBuilder: (level) => GoogleFonts.merriweather(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        color: colors.accent,
-                      ),
-                    ),
-                  },
-                  editorStyle: EditorStyle.desktop(
-                    cursorColor: colors.accent,
-                    selectionColor: colors.accent.withValues(alpha: 0.2),
-                    textStyleConfiguration: TextStyleConfiguration(
-                      text: GoogleFonts.inter(
-                        fontSize: 16,
-                        color: colors.inkPrimary,
-                      ),
-                      code: GoogleFonts.jetBrainsMono(
-                        color: colors.inkPrimary,
-                        backgroundColor: colors.surfacePanel,
-                      ),
-                    ),
-                  ),
-                  characterShortcutEvents: [
-                    ...standardCharacterShortcutEvents.where((e) => e != slashCommand),
-                    customSlashCommand(
-                      standardSelectionMenuItems,
-                      style: SelectionMenuStyle(
-                        selectionMenuBackgroundColor: colors.surfacePanel,
-                        selectionMenuItemTextColor: colors.inkPrimary,
-                        selectionMenuItemIconColor: colors.inkPrimary,
-                        selectionMenuItemSelectedTextColor: colors.accent,
-                        selectionMenuItemSelectedIconColor: colors.accent,
-                        selectionMenuItemSelectedColor: Colors.transparent,
-                        selectionMenuUnselectedLabelColor: colors.inkMuted,
-                        selectionMenuDividerColor: colors.border,
-                        selectionMenuLinkBorderColor: colors.border,
-                        selectionMenuInvalidLinkColor: Colors.red,
-                        selectionMenuButtonColor: colors.accent,
-                        selectionMenuButtonTextColor: colors.surfaceBase,
-                        selectionMenuButtonIconColor: colors.surfaceBase,
-                        selectionMenuButtonBorderColor: colors.accent,
-                        selectionMenuTabIndicatorColor: colors.accent,
-                      ),
-                    ),
-                  ],
-                  contextMenuBuilder: (context, position, editorState, onPressed) => const SizedBox.shrink(),
-                );
-              },
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (err, stack) => Center(child: Text('Error: $err')),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 250),
+              child: contentChild,
             ),
           ),
         ],
@@ -280,11 +290,40 @@ class _TopBar extends ConsumerWidget {
   }
 }
 
-class _Placeholder extends StatelessWidget {
-  const _Placeholder();
+class _Placeholder extends StatefulWidget {
+  const _Placeholder({required this.hasPages});
+  final bool hasPages;
+
+  @override
+  State<_Placeholder> createState() => _PlaceholderState();
+}
+
+class _PlaceholderState extends State<_Placeholder> {
+  bool _show = false;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer(const Duration(milliseconds: 1000), () {
+      if (mounted) {
+        setState(() {
+          _show = true;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (!_show) return const SizedBox.shrink();
+
     final colors = AppTheme.colorsOf(context);
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -292,10 +331,46 @@ class _Placeholder extends StatelessWidget {
         Icon(Icons.edit_note_rounded, color: colors.inkMuted, size: 48),
         const SizedBox(height: AppSpacing.md),
         Text(
-          'Select a page to start editing',
+          widget.hasPages ? 'Select a page or create a new one' : "Click '+' to get started",
           style: TextStyle(color: colors.inkMuted, fontSize: 14),
         ),
       ],
     );
+  }
+}
+
+class _DelayedLoader extends StatefulWidget {
+  const _DelayedLoader();
+
+  @override
+  State<_DelayedLoader> createState() => _DelayedLoaderState();
+}
+
+class _DelayedLoaderState extends State<_DelayedLoader> {
+  bool _show = false;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer(const Duration(milliseconds: 1000), () {
+      if (mounted) {
+        setState(() {
+          _show = true;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_show) return const SizedBox.shrink();
+    return const CircularProgressIndicator();
   }
 }

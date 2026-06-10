@@ -5,6 +5,7 @@ import '../../core/database/database.dart';
 import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../layout/providers.dart';
+import '../pages/providers.dart';
 import 'providers.dart';
 
 class SectionsPane extends ConsumerWidget {
@@ -124,6 +125,7 @@ class _BottomBar extends ConsumerWidget {
             icon: Icon(Icons.add_rounded, color: colors.inkMuted, size: 18),
             onPressed: () async {
               final section = await ref.read(repositoryProvider).createSection('New Section');
+              ref.read(activePageProvider.notifier).select(null);
               ref.read(activeSectionProvider.notifier).select(section.id);
             },
             splashRadius: 16,
@@ -135,7 +137,7 @@ class _BottomBar extends ConsumerWidget {
   }
 }
 
-class _SectionItem extends ConsumerWidget {
+class _SectionItem extends ConsumerStatefulWidget {
   const _SectionItem({
     required this.section,
     required this.isSelected,
@@ -146,28 +148,60 @@ class _SectionItem extends ConsumerWidget {
   final bool isSelected;
   final VoidCallback onTap;
 
-  void _showRenameDialog(BuildContext context, WidgetRef ref) {
+  @override
+  ConsumerState<_SectionItem> createState() => _SectionItemState();
+}
+
+class _SectionItemState extends ConsumerState<_SectionItem> {
+  bool _isRenaming = false;
+  late final TextEditingController _controller;
+  late final FocusNode _focusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.section.title);
+    _focusNode = FocusNode()
+      ..addListener(() {
+        if (!_focusNode.hasFocus && _isRenaming) {
+          _saveRename();
+        }
+      });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _saveRename() {
+    if (!_isRenaming) return;
+    
+    final val = _controller.text.trim();
+    if (val.isEmpty) {
+      // Revert to old name if empty
+      _controller.text = widget.section.title;
+    } else if (val != widget.section.title) {
+      ref.read(repositoryProvider).updateSectionTitle(widget.section.id, val);
+    }
+    
+    setState(() {
+      _isRenaming = false;
+    });
+  }
+
+  void _showDeleteConfirmationDialog(BuildContext context) {
     final colors = AppTheme.colorsOf(context);
-    final controller = TextEditingController(text: section.title);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: colors.surfacePanel,
-        title: Text('Rename Section', style: TextStyle(color: colors.inkPrimary)),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
+        title: Text('Delete Section?', style: TextStyle(color: colors.inkPrimary)),
+        content: Text(
+          'Delete "${widget.section.title}" and all its pages?',
           style: TextStyle(color: colors.inkPrimary),
-          decoration: InputDecoration(
-            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: colors.border)),
-            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: colors.accent)),
-          ),
-          onSubmitted: (val) {
-            if (val.trim().isNotEmpty) {
-              ref.read(repositoryProvider).updateSectionTitle(section.id, val.trim());
-            }
-            Navigator.of(context).pop();
-          },
         ),
         actions: [
           TextButton(
@@ -176,13 +210,14 @@ class _SectionItem extends ConsumerWidget {
           ),
           TextButton(
             onPressed: () {
-              final val = controller.text;
-              if (val.trim().isNotEmpty) {
-                ref.read(repositoryProvider).updateSectionTitle(section.id, val.trim());
+              ref.read(repositoryProvider).softDeleteSection(widget.section.id);
+              if (widget.isSelected) {
+                ref.read(activePageProvider.notifier).select(null);
+                ref.read(activeSectionProvider.notifier).select(null);
               }
               Navigator.of(context).pop();
             },
-            child: Text('Save', style: TextStyle(color: colors.accent)),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -190,18 +225,25 @@ class _SectionItem extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final colors = AppTheme.colorsOf(context);
+    
+    // Keep controller in sync with external title changes if not renaming
+    if (!_isRenaming && _controller.text != widget.section.title) {
+      _controller.text = widget.section.title;
+    }
+    
     return Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.sm,
         vertical: 1,
       ),
       child: Material(
-        color: isSelected ? colors.surfaceHover : Colors.transparent,
+        color: widget.isSelected ? colors.surfaceHover : Colors.transparent,
         borderRadius: BorderRadius.circular(6),
         child: GestureDetector(
           onSecondaryTapDown: (details) {
+            if (_isRenaming) return;
             showMenu(
               context: context,
               position: RelativeRect.fromLTRB(
@@ -224,19 +266,23 @@ class _SectionItem extends ConsumerWidget {
             ).then((value) {
               if (!context.mounted) return;
               if (value == 'rename') {
-                _showRenameDialog(context, ref);
+                setState(() {
+                  _isRenaming = true;
+                });
+                _focusNode.requestFocus();
               } else if (value == 'delete') {
-                ref.read(repositoryProvider).softDeleteSection(section.id);
-                if (isSelected) {
-                  ref.read(activeSectionProvider.notifier).select(null);
-                }
+                _showDeleteConfirmationDialog(context);
               }
             });
           },
           child: InkWell(
             borderRadius: BorderRadius.circular(6),
             hoverColor: colors.surfaceHover,
-            onTap: onTap,
+            onTap: () {
+              if (_isRenaming) return;
+              ref.read(activePageProvider.notifier).select(null);
+              widget.onTap();
+            },
             child: Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.sm,
@@ -246,22 +292,36 @@ class _SectionItem extends ConsumerWidget {
                 children: [
                   Icon(
                     Icons.folder_outlined,
-                    color: isSelected ? colors.accent : colors.inkMuted,
+                    color: widget.isSelected ? colors.accent : colors.inkMuted,
                     size: 16,
                   ),
                   const SizedBox(width: AppSpacing.sm),
                   Expanded(
-                    child: Text(
-                      section.title,
-                      style: TextStyle(
-                        color: isSelected ? colors.accent : colors.inkPrimary,
-                        fontSize: 13,
-                        fontWeight: isSelected
-                            ? FontWeight.w600
-                            : FontWeight.w400,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    child: _isRenaming
+                        ? TextField(
+                            controller: _controller,
+                            focusNode: _focusNode,
+                            style: TextStyle(
+                              color: widget.isSelected ? colors.accent : colors.inkPrimary,
+                              fontSize: 13,
+                              fontWeight: widget.isSelected ? FontWeight.w600 : FontWeight.w400,
+                            ),
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              contentPadding: EdgeInsets.zero,
+                              border: InputBorder.none,
+                            ),
+                            onSubmitted: (_) => _saveRename(),
+                          )
+                        : Text(
+                            widget.section.title,
+                            style: TextStyle(
+                              color: widget.isSelected ? colors.accent : colors.inkPrimary,
+                              fontSize: 13,
+                              fontWeight: widget.isSelected ? FontWeight.w600 : FontWeight.w400,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                   ),
                 ],
               ),
