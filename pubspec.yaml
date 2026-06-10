@@ -1,0 +1,49 @@
+name: sheep
+description: "A minimal, distraction-free note-taking app."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.11.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # --- Editor ---
+  appflowy_editor: 6.2.0          # pinned exactly per spec
+
+  # --- State Management ---
+  flutter_riverpod: ^3.3.1
+
+  # --- Database ---
+  drift: ^2.33.0
+  drift_flutter: ^0.3.0           # replaces obsolete sqlite3_flutter_libs
+  path_provider: ^2.1.5
+
+  # --- Utilities ---
+  uuid: ^4.5.3
+  intl: ^0.20.2                   # also a transitive dep of appflowy_editor
+  google_fonts: ^8.1.0
+
+  # --- UI & Animation ---
+  flutter_animate: ^4.5.2
+
+  # --- File & Export ---
+  file_picker: ^10.3.10           # also a transitive dep of appflowy_editor
+  pdf: ^3.10.7                    # also a transitive dep of appflowy_editor
+  share_plus: ^12.0.2             # pinned below 13.x — share_plus 13+ needs win32 ^6.x
+                                    # but appflowy_editor 6.2.0 → file_picker ^10.x → win32 ^5.x
+
+  # --- Desktop Window ---
+  window_manager: ^0.5.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  drift_dev: ^2.32.1
+  build_runner: ^2.15.0
+
+flutter:
+  uses-material-design: true
