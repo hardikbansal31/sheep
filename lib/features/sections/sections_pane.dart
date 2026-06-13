@@ -6,6 +6,7 @@ import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../layout/providers.dart';
 import '../pages/providers.dart';
+import '../settings/settings_modal.dart';
 import 'providers.dart';
 
 class SectionsPane extends ConsumerWidget {
@@ -119,6 +120,17 @@ class _BottomBar extends ConsumerWidget {
             onPressed: () {},
             splashRadius: 16,
             tooltip: 'Search',
+          ),
+          IconButton(
+            icon: Icon(Icons.settings_outlined, color: colors.inkMuted, size: 18),
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (context) => const SettingsModal(),
+              );
+            },
+            splashRadius: 16,
+            tooltip: 'Settings',
           ),
           const Spacer(),
           IconButton(

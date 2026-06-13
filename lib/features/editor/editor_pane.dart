@@ -9,9 +9,14 @@ import '../../core/database/database.dart' as db;
 import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../layout/providers.dart';
+import '../export/export_service.dart';
+import '../export/markdown_exporter.dart';
+import '../export/pdf_exporter.dart';
 import '../pages/providers.dart';
 import '../search/search_modal.dart';
 import '../sections/providers.dart';
+import '../settings/providers.dart';
+import '../settings/settings_state.dart';
 import 'providers.dart';
 
 class EditorPane extends ConsumerStatefulWidget {
@@ -121,6 +126,8 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
     final colors = AppTheme.colorsOf(context);
     final activePageId = ref.watch(activePageProvider);
     final activeSectionId = ref.watch(activeSectionProvider);
+    final settingsAsync = ref.watch(settingsProvider);
+    final settings = settingsAsync.value ?? const SettingsState();
 
     Widget contentChild;
 
@@ -175,10 +182,17 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
                 blockComponentBuilders: {
                   ...standardBlockComponentBuilderMap,
                   'title': HeadingBlockComponentBuilder(
-                    textStyleBuilder: (level) => GoogleFonts.merriweather(
+                    textStyleBuilder: (level) => GoogleFonts.getFont(
+                      settings.fontTitle,
                       fontSize: 32,
                       fontWeight: FontWeight.bold,
                       color: colors.accent,
+                    ),
+                  ),
+                  HeadingBlockKeys.type: HeadingBlockComponentBuilder(
+                    textStyleBuilder: (level) => GoogleFonts.getFont(
+                      settings.fontHeadings,
+                      color: colors.inkPrimary,
                     ),
                   ),
                 },
@@ -186,11 +200,13 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
                   cursorColor: colors.accent,
                   selectionColor: colors.accent.withValues(alpha: 0.2),
                   textStyleConfiguration: TextStyleConfiguration(
-                    text: GoogleFonts.inter(
-                      fontSize: 16,
+                    text: GoogleFonts.getFont(
+                      settings.fontParagraph,
+                      fontSize: settings.defaultFontSize,
                       color: colors.inkPrimary,
                     ),
-                    code: GoogleFonts.jetBrainsMono(
+                    code: GoogleFonts.getFont(
+                      settings.fontCode,
                       color: colors.inkPrimary,
                       backgroundColor: colors.surfacePanel,
                     ),
@@ -232,7 +248,7 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
       color: colors.surfaceBase,
       child: Column(
         children: [
-          _TopBar(colors: colors, editorState: activePageId == null ? null : _editorState),
+          _TopBar(colors: colors, editorState: activePageId == null ? null : _editorState, settings: settings),
           Expanded(
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 250),
@@ -246,9 +262,10 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
 }
 
 class _TopBar extends ConsumerStatefulWidget {
-  const _TopBar({required this.colors, required this.editorState});
+  const _TopBar({required this.colors, required this.editorState, required this.settings});
   final AppColors colors;
   final EditorState? editorState;
+  final SettingsState settings;
 
   @override
   ConsumerState<_TopBar> createState() => _TopBarState();
@@ -329,8 +346,8 @@ class _TopBarState extends ConsumerState<_TopBar> {
       }
 
       setState(() {
-        _currentFontFamily = toggledFont != null ? _reverseResolveGoogleFont(toggledFont) : 'Inter';
-        _currentFontSize = toggledSize ?? 16.0;
+        _currentFontFamily = toggledFont != null ? _reverseResolveGoogleFont(toggledFont) : widget.settings.fontParagraph;
+        _currentFontSize = toggledSize ?? widget.settings.defaultFontSize;
       });
     } else {
       // Range selection: collect all font families and sizes in the selection
@@ -366,8 +383,8 @@ class _TopBarState extends ConsumerState<_TopBar> {
             final font = attrs?[AppFlowyRichTextKeys.fontFamily] as String?;
             final size = attrs?[AppFlowyRichTextKeys.fontSize] as double?;
             
-            fontFamilies.add(font != null ? _reverseResolveGoogleFont(font) : 'Inter');
-            fontSizes.add(size ?? 16.0);
+            fontFamilies.add(font != null ? _reverseResolveGoogleFont(font) : widget.settings.fontParagraph);
+            fontSizes.add(size ?? widget.settings.defaultFontSize);
           }
           currentOffset += op.length;
         }
@@ -375,7 +392,7 @@ class _TopBarState extends ConsumerState<_TopBar> {
 
       setState(() {
         if (fontFamilies.isEmpty) {
-          _currentFontFamily = 'Inter';
+          _currentFontFamily = widget.settings.fontParagraph;
         } else if (fontFamilies.length == 1) {
           _currentFontFamily = fontFamilies.first;
         } else {
@@ -383,7 +400,7 @@ class _TopBarState extends ConsumerState<_TopBar> {
         }
 
         if (fontSizes.isEmpty) {
-          _currentFontSize = 16.0;
+          _currentFontSize = widget.settings.defaultFontSize;
         } else if (fontSizes.length == 1) {
           _currentFontSize = fontSizes.first;
         } else {
@@ -646,6 +663,9 @@ class _TopBarState extends ConsumerState<_TopBar> {
           
           const Spacer(),
           
+          // Export
+          if (editorState != null) _exportBtn(),
+
           // Global Search
           _iconBtn(Icons.search, 'Search (Ctrl+K)', () {
             showDialog(
@@ -668,6 +688,70 @@ class _TopBarState extends ConsumerState<_TopBar> {
       onPressed: onPressed ?? () {},
       splashRadius: 16,
       tooltip: tooltip,
+    );
+  }
+
+  String _extractTitle(Document document) {
+    if (document.root.children.isEmpty) return '';
+    final firstNode = document.root.children.first;
+    final delta = firstNode.delta;
+    return delta?.toPlainText().trim() ?? '';
+  }
+
+  Widget _exportBtn() {
+    return PopupMenuButton<String>(
+      icon: Icon(Icons.ios_share, color: widget.colors.inkSecondary, size: 18),
+      tooltip: 'Export',
+      color: widget.colors.surfacePanel,
+      onSelected: (value) async {
+        if (widget.editorState == null) return;
+        final contentStr = jsonEncode(widget.editorState!.document.toJson());
+        
+        final title = _extractTitle(widget.editorState!.document);
+        final safeTitle = title.isEmpty ? 'Untitled' : title.replaceAll(RegExp(r'[^\w\s]+'), '').replaceAll(' ', '_');
+
+        if (value == 'markdown') {
+          final confirmed = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              backgroundColor: widget.colors.surfacePanel,
+              title: Text('Export Markdown', style: TextStyle(color: widget.colors.inkPrimary)),
+              content: Text(
+                'Exporting to Markdown is lossy. Font families and precise font sizes will be dropped.',
+                style: TextStyle(color: widget.colors.inkPrimary),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: Text('Cancel', style: TextStyle(color: widget.colors.inkMuted)),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: Text('Continue', style: TextStyle(color: widget.colors.accent)),
+                ),
+              ],
+            ),
+          );
+
+          if (confirmed == true) {
+            final md = MarkdownExporter.export(contentStr);
+            await ExportService.exportString(md, '$safeTitle.md');
+          }
+        } else if (value == 'pdf') {
+          final pdfBytes = await PdfExporter.export(contentStr);
+          await ExportService.exportBytes(pdfBytes, '$safeTitle.pdf');
+        }
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem(
+          value: 'markdown',
+          child: Text('Export as Markdown', style: TextStyle(color: widget.colors.inkPrimary)),
+        ),
+        PopupMenuItem(
+          value: 'pdf',
+          child: Text('Export as PDF', style: TextStyle(color: widget.colors.inkPrimary)),
+        ),
+      ],
     );
   }
 }
