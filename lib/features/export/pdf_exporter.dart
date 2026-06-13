@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:flutter/services.dart' show rootBundle;
 
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -8,14 +7,6 @@ import 'package:pdf/widgets.dart' as pw;
 class PdfExporter {
   static Future<Uint8List> export(String contentJson) async {
     final pdf = pw.Document();
-
-    pw.Font? emojiFont;
-    try {
-      final fontData = await rootBundle.load('assets/fonts/NotoEmoji-Regular.ttf');
-      emojiFont = pw.Font.ttf(fontData);
-    } catch (e) {
-      // Ignore if font fails to load
-    }
 
     try {
       final doc = jsonDecode(contentJson) as Map<String, dynamic>;
@@ -27,7 +18,7 @@ class PdfExporter {
         final widgets = <pw.Widget>[];
         for (final child in children) {
           if (child is Map<String, dynamic>) {
-            _walkNode(child, widgets, 0, emojiFont);
+            _walkNode(child, widgets, 0);
           }
         }
         
@@ -44,10 +35,16 @@ class PdfExporter {
       pdf.addPage(pw.Page(build: (context) => pw.Text('Error generating PDF: $e')));
     }
 
-    return pdf.save();
+    try {
+      return await pdf.save();
+    } catch (e) {
+      final errPdf = pw.Document();
+      errPdf.addPage(pw.Page(build: (context) => pw.Text('Error generating PDF: $e')));
+      return await errPdf.save();
+    }
   }
 
-  static void _walkNode(Map<String, dynamic> node, List<pw.Widget> widgets, int indentLevel, pw.Font? emojiFont) {
+  static void _walkNode(Map<String, dynamic> node, List<pw.Widget> widgets, int indentLevel) {
     final type = node['type'] as String?;
     final delta = (node['data'] as Map<String, dynamic>?)?['delta'] as List?;
     
@@ -96,7 +93,6 @@ class PdfExporter {
               font: font,
               fontWeight: weight,
               fontStyle: style,
-              fontFallback: emojiFont != null ? <pw.Font>[emojiFont] : const <pw.Font>[],
             ),
           ));
         }
@@ -207,7 +203,7 @@ class PdfExporter {
           final newIndent = (type == 'bulleted_list' || type == 'numbered_list' || type == 'todo_list') 
               ? indentLevel + 1 
               : indentLevel;
-          _walkNode(child, widgets, newIndent, emojiFont);
+          _walkNode(child, widgets, newIndent);
         }
       }
     }
@@ -215,14 +211,14 @@ class PdfExporter {
 
   static String _sanitizeText(String text) {
     return text
-        .replaceAll('“', '"')
-        .replaceAll('”', '"')
-        .replaceAll('‘', "'")
-        .replaceAll('’', "'")
-        .replaceAll('–', '-')
-        .replaceAll('—', '--')
-        .replaceAll('…', '...')
+        .replaceAll(RegExp(r'[\u201C\u201D\u0093\u0094]'), '"')
+        .replaceAll(RegExp(r'[\u2018\u2019\u0091\u0092\u00B4`]'), "'")
+        .replaceAll(RegExp(r'[\u2013\u2014\u0096\u0097\u2212]'), '-')
+        .replaceAll(RegExp(r'[\u2026\u0085]'), '...')
         .replaceAll('→', '->')
-        .replaceAll('←', '<-');
+        .replaceAll('←', '<-')
+        // Strictly allow only standard printable ASCII, tab, newline, and carriage return.
+        // This guarantees no 'missing glyph' boxes can be drawn by the PDF engine.
+        .replaceAll(RegExp(r'[^\x20-\x7E\n\r\t]'), '');
   }
 }
