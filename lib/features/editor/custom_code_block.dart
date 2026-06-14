@@ -101,14 +101,14 @@ class _CustomCodeBlockComponentWidgetState extends State<CustomCodeBlockComponen
         placeholderText: placeholderText,
         textSpanDecorator: (textSpan) {
           // Force JetBrains Mono font
-          return textSpan.updateTextStyle(
-            textStyleWithTextSpan(textSpan: textSpan).copyWith(
-              fontFamily: GoogleFonts.jetBrainsMono().fontFamily,
-              fontSize: 13,
-              height: 1.5,
-              color: colors.inkPrimary,
-            ),
-          );
+            return textSpan.updateTextStyle(
+              textStyleWithTextSpan(textSpan: textSpan).copyWith(
+                fontFamily: GoogleFonts.jetBrainsMono().fontFamily,
+                fontSize: editorState.editorStyle.textStyleConfiguration.code.fontSize ?? 13,
+                height: 1.5,
+                color: colors.inkPrimary,
+              ),
+            );
         },
         placeholderTextSpanDecorator: (textSpan) =>
             textSpan.updateTextStyle(

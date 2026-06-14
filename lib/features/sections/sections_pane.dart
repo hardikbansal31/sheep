@@ -6,7 +6,9 @@ import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../layout/providers.dart';
 import '../pages/providers.dart';
+import '../settings/providers.dart';
 import '../settings/settings_modal.dart';
+import '../settings/settings_state.dart';
 import 'providers.dart';
 
 class SectionsPane extends ConsumerWidget {
@@ -71,6 +73,8 @@ class _Header extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final uiScale = (ref.watch(settingsProvider).value ?? const SettingsState()).uiScale;
+
     return Container(
       height: AppSpacing.xxl,
       padding: const EdgeInsets.only(left: AppSpacing.md, right: AppSpacing.xs),
@@ -78,10 +82,10 @@ class _Header extends ConsumerWidget {
       child: Row(
         children: [
           Text(
-            'sections',
+            'Sections',
             style: TextStyle(
               color: colors.inkSecondary,
-              fontSize: 11,
+              fontSize: 11 * uiScale,
               fontWeight: FontWeight.w600,
               letterSpacing: 0.8,
             ),
@@ -239,6 +243,7 @@ class _SectionItemState extends ConsumerState<_SectionItem> {
   @override
   Widget build(BuildContext context) {
     final colors = AppTheme.colorsOf(context);
+    final uiScale = (ref.watch(settingsProvider).value ?? const SettingsState()).uiScale;
     
     // Keep controller in sync with external title changes if not renaming
     if (!_isRenaming && _controller.text != widget.section.title) {
@@ -268,11 +273,11 @@ class _SectionItemState extends ConsumerState<_SectionItem> {
               items: [
                 PopupMenuItem(
                   value: 'rename',
-                  child: Text('Rename', style: TextStyle(color: colors.inkPrimary)),
+                  child: Text('Rename', style: TextStyle(color: colors.inkPrimary, fontSize: 14 * uiScale)),
                 ),
                 PopupMenuItem(
                   value: 'delete',
-                  child: Text('Delete', style: TextStyle(color: Colors.red)),
+                  child: Text('Delete', style: TextStyle(color: Colors.red, fontSize: 14 * uiScale)),
                 ),
               ],
             ).then((value) {
@@ -305,7 +310,7 @@ class _SectionItemState extends ConsumerState<_SectionItem> {
                   Icon(
                     Icons.folder_outlined,
                     color: widget.isSelected ? colors.accent : colors.inkMuted,
-                    size: 16,
+                    size: 16 * uiScale,
                   ),
                   const SizedBox(width: AppSpacing.sm),
                   Expanded(
@@ -315,7 +320,7 @@ class _SectionItemState extends ConsumerState<_SectionItem> {
                             focusNode: _focusNode,
                             style: TextStyle(
                               color: widget.isSelected ? colors.accent : colors.inkPrimary,
-                              fontSize: 13,
+                              fontSize: 13 * uiScale,
                               fontWeight: widget.isSelected ? FontWeight.w600 : FontWeight.w400,
                             ),
                             decoration: const InputDecoration(
@@ -329,7 +334,7 @@ class _SectionItemState extends ConsumerState<_SectionItem> {
                             widget.section.title,
                             style: TextStyle(
                               color: widget.isSelected ? colors.accent : colors.inkPrimary,
-                              fontSize: 13,
+                              fontSize: 13 * uiScale,
                               fontWeight: widget.isSelected ? FontWeight.w600 : FontWeight.w400,
                             ),
                             overflow: TextOverflow.ellipsis,

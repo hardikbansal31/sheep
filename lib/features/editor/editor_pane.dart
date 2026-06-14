@@ -23,23 +23,26 @@ import 'custom_code_block.dart';
 import 'providers.dart';
 import 'spell_check_service.dart';
 
-final GlobalKey editorPaneKey = GlobalKey(debugLabel: 'editor_pane_key');
+final GlobalKey<EditorPaneState> editorPaneKey = GlobalKey<EditorPaneState>(
+  debugLabel: 'editor_pane_key',
+);
 
 class EditorPane extends ConsumerStatefulWidget {
   const EditorPane({super.key});
 
   @override
-  ConsumerState<EditorPane> createState() => _EditorPaneState();
+  ConsumerState<EditorPane> createState() => EditorPaneState();
 }
 
-class _EditorPaneState extends ConsumerState<EditorPane> {
+class EditorPaneState extends ConsumerState<EditorPane> {
   EditorState? _editorState;
   EditorScrollController? _editorScrollController;
   Timer? _debounceTimer;
   String? _currentlyLoadedPageId;
 
   final Map<String, List<TextRange>> _misspelledRanges = {};
-  final Map<String, List<({TextRange range, DateTime timestamp})>> _correctedRanges = {};
+  final Map<String, List<({TextRange range, DateTime timestamp})>>
+  _correctedRanges = {};
   final Map<String, Timer> _spellCheckDebouncers = {};
 
   @override
@@ -57,13 +60,15 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
         if (title.isNotEmpty) {
           final jsonStr = jsonEncode(_editorState!.document.toJson());
           try {
-            ref.read(repositoryProvider).updatePage(_currentlyLoadedPageId!, title, jsonStr);
+            ref
+                .read(repositoryProvider)
+                .updatePage(_currentlyLoadedPageId!, title, jsonStr);
             ref.invalidate(fullPageProvider(_currentlyLoadedPageId!));
           } catch (_) {}
         }
       }
     }
-    
+
     _editorScrollController?.dispose();
     _editorState?.dispose();
     for (final debouncer in _spellCheckDebouncers.values) {
@@ -74,11 +79,15 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
 
   void _initEditorState(db.Page page) {
     _debounceTimer?.cancel();
-    _editorScrollController?.dispose();
-    _editorState?.dispose();
+    final oldEditorState = _editorState;
+    final oldScrollController = _editorScrollController;
+    Timer(const Duration(milliseconds: 350), () {
+      oldEditorState?.dispose();
+      oldScrollController?.dispose();
+    });
 
     final jsonMap = jsonDecode(page.contentJson) as Map<String, dynamic>;
-    
+
     // Ensure the first block is a title block for existing pages
     try {
       final documentMap = jsonMap['document'] as Map<String, dynamic>?;
@@ -94,11 +103,19 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
             // Document is empty somehow, add a title block
             children.add({
               'type': 'title',
-              'data': {'delta': [{'insert': page.title}]}
+              'data': {
+                'delta': [
+                  {'insert': page.title},
+                ],
+              },
             });
             children.add({
               'type': 'paragraph',
-              'data': {'delta': [{'insert': ''}]}
+              'data': {
+                'delta': [
+                  {'insert': ''},
+                ],
+              },
             });
           }
         }
@@ -132,23 +149,30 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
       _debounceTimer?.cancel();
       _debounceTimer = Timer(const Duration(milliseconds: 500), () async {
         // Only save if the current loaded page is still the active one
-        if (_currentlyLoadedPageId == page.id && ref.read(activePageProvider) == page.id) {
-           final title = _extractTitle(newEditorState.document);
-           if (title.isEmpty) {
-             ScaffoldMessenger.of(context).showSnackBar(
-               const SnackBar(content: Text('Title cannot be empty. Reverting to last saved state or please provide a title.')),
-             );
-             // Skip saving
-             return;
-           }
+        if (_currentlyLoadedPageId == page.id &&
+            ref.read(activePageProvider) == page.id) {
+          final title = _extractTitle(newEditorState.document);
+          if (title.isEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Title cannot be empty. Reverting to last saved state or please provide a title.',
+                ),
+              ),
+            );
+            // Skip saving
+            return;
+          }
 
-           final jsonStr = jsonEncode(newEditorState.document.toJson());
-           try {
-             await ref.read(repositoryProvider).updatePage(page.id, title, jsonStr);
-             ref.invalidate(fullPageProvider(page.id));
-           } catch (e) {
-             debugPrint('Error saving page: $e');
-           }
+          final jsonStr = jsonEncode(newEditorState.document.toJson());
+          try {
+            await ref
+                .read(repositoryProvider)
+                .updatePage(page.id, title, jsonStr);
+            ref.invalidate(fullPageProvider(page.id));
+          } catch (e) {
+            debugPrint('Error saving page: $e');
+          }
         }
       });
     });
@@ -157,6 +181,26 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
       _editorState = newEditorState;
       _editorScrollController = newScrollController;
       _currentlyLoadedPageId = page.id;
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final rootChildren = newEditorState.document.root.children;
+        if (rootChildren.length > 1) {
+          final firstBodyNode = rootChildren[1];
+          newEditorState.updateSelectionWithReason(
+            Selection.collapsed(Position(path: firstBodyNode.path, offset: 0)),
+            reason: SelectionUpdateReason.uiEvent,
+          );
+        } else if (rootChildren.isNotEmpty) {
+          final titleNode = rootChildren.first;
+          final length = titleNode.delta?.length ?? 0;
+          newEditorState.updateSelectionWithReason(
+            Selection.collapsed(Position(path: titleNode.path, offset: length)),
+            reason: SelectionUpdateReason.uiEvent,
+          );
+        }
+      }
     });
   }
 
@@ -169,67 +213,91 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
         walk(child);
       }
     }
+
     walk(document.root);
   }
 
   void _debounceSpellCheckForNode(Node node) {
     final nodeId = node.id;
     _spellCheckDebouncers[nodeId]?.cancel();
-    _spellCheckDebouncers[nodeId] = Timer(const Duration(milliseconds: 300), () async {
-      final text = node.delta?.toPlainText() ?? '';
-      final ranges = await ref.read(spellCheckServiceProvider).checkSpelling(text);
+    _spellCheckDebouncers[nodeId] = Timer(
+      const Duration(milliseconds: 300),
+      () async {
+        final text = node.delta?.toPlainText() ?? '';
+        final ranges = await ref
+            .read(spellCheckServiceProvider)
+            .checkSpelling(text);
 
-      final previous = _misspelledRanges[nodeId] ?? [];
-      final correctedList = <({TextRange range, DateTime timestamp})>[];
+        final previous = _misspelledRanges[nodeId] ?? [];
+        final correctedList = <({TextRange range, DateTime timestamp})>[];
 
-      // Compare previous misspelled words with current misspelled words
-      final previousWords = previous.map((r) {
-        if (r.start < 0 || r.end > text.length || r.start > r.end) return '';
-        return text.substring(r.start, r.end);
-      }).where((w) => w.isNotEmpty).toSet();
-      
-      final currentMisspelledWords = ranges.map((r) {
-        if (r.start < 0 || r.end > text.length || r.start > r.end) return '';
-        return text.substring(r.start, r.end).toLowerCase();
-      }).toSet();
+        // Compare previous misspelled words with current misspelled words
+        final previousWords = previous
+            .map((r) {
+              if (r.start < 0 || r.end > text.length || r.start > r.end)
+                return '';
+              return text.substring(r.start, r.end);
+            })
+            .where((w) => w.isNotEmpty)
+            .toSet();
 
-      for (final prevWord in previousWords) {
-        if (!currentMisspelledWords.contains(prevWord.toLowerCase())) {
-          // Word was corrected, locate it in the current text
-          final escaped = RegExp.escape(prevWord);
-          final matches = RegExp(escaped).allMatches(text);
-          for (final m in matches) {
-            final wordRange = TextRange(start: m.start, end: m.end);
-            final isStillMisspelled = ranges.any((r) => r.start <= m.start && r.end >= m.end);
-            if (!isStillMisspelled) {
-              correctedList.add((range: wordRange, timestamp: DateTime.now()));
+        final currentMisspelledWords = ranges.map((r) {
+          if (r.start < 0 || r.end > text.length || r.start > r.end) return '';
+          return text.substring(r.start, r.end).toLowerCase();
+        }).toSet();
+
+        for (final prevWord in previousWords) {
+          if (!currentMisspelledWords.contains(prevWord.toLowerCase())) {
+            // Word was corrected, locate it in the current text
+            final escaped = RegExp.escape(prevWord);
+            final matches = RegExp(escaped).allMatches(text);
+            for (final m in matches) {
+              final wordRange = TextRange(start: m.start, end: m.end);
+              final isStillMisspelled = ranges.any(
+                (r) => r.start <= m.start && r.end >= m.end,
+              );
+              if (!isStillMisspelled) {
+                correctedList.add((
+                  range: wordRange,
+                  timestamp: DateTime.now(),
+                ));
+              }
             }
           }
         }
-      }
 
-      if (mounted) {
-        setState(() {
-          _misspelledRanges[nodeId] = ranges;
-          if (correctedList.isNotEmpty) {
-            _correctedRanges[nodeId] = [
-              ...(_correctedRanges[nodeId] ?? []).where((item) => DateTime.now().difference(item.timestamp).inMilliseconds < 1500),
-              ...correctedList,
-            ];
-            // Clear corrected highlight after 1.5s
-            Timer(const Duration(milliseconds: 1500), () {
-              if (mounted) {
-                setState(() {
-                  _correctedRanges[nodeId]?.removeWhere((item) => DateTime.now().difference(item.timestamp).inMilliseconds >= 1500);
-                });
-              }
-            });
-          }
-        });
-      }
-    });
+        if (mounted) {
+          setState(() {
+            _misspelledRanges[nodeId] = ranges;
+            if (correctedList.isNotEmpty) {
+              _correctedRanges[nodeId] = [
+                ...(_correctedRanges[nodeId] ?? []).where(
+                  (item) =>
+                      DateTime.now().difference(item.timestamp).inMilliseconds <
+                      1500,
+                ),
+                ...correctedList,
+              ];
+              // Clear corrected highlight after 1.5s
+              Timer(const Duration(milliseconds: 1500), () {
+                if (mounted) {
+                  setState(() {
+                    _correctedRanges[nodeId]?.removeWhere(
+                      (item) =>
+                          DateTime.now()
+                              .difference(item.timestamp)
+                              .inMilliseconds >=
+                          1500,
+                    );
+                  });
+                }
+              });
+            }
+          });
+        }
+      },
+    );
   }
-
 
   CommandShortcutEvent get _customPasteCommand {
     return CommandShortcutEvent(
@@ -252,19 +320,30 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
 
       if (children.isNotEmpty) {
         final firstChild = children.first;
-        final isSinglePlainTextParagraph = children.length == 1 &&
+        final isSinglePlainTextParagraph =
+            children.length == 1 &&
             firstChild.type == ParagraphBlockKeys.type &&
-            (firstChild.delta == null || !firstChild.delta!.any((op) => op.attributes != null && op.attributes!.isNotEmpty));
+            (firstChild.delta == null ||
+                !firstChild.delta!.any(
+                  (op) => op.attributes != null && op.attributes!.isNotEmpty,
+                ));
 
         if (isSinglePlainTextParagraph) {
           await editorState._pastePlainText(text);
         } else {
           final selection = editorState.selection;
-          if (selection != null && selection.isCollapsed && children.length == 1 && firstChild.type == ParagraphBlockKeys.type) {
+          if (selection != null &&
+              selection.isCollapsed &&
+              children.length == 1 &&
+              firstChild.type == ParagraphBlockKeys.type) {
             final node = editorState.getNodeAtPath(selection.end.path);
             if (node != null && node.delta != null) {
               final transaction = editorState.transaction;
-              transaction.insertTextDelta(node, selection.startIndex, firstChild.delta!);
+              transaction.insertTextDelta(
+                node,
+                selection.startIndex,
+                firstChild.delta!,
+              );
               editorState.apply(transaction);
               return;
             }
@@ -284,6 +363,45 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
     return delta?.toPlainText().trim() ?? '';
   }
 
+  void applyBlockType(String type) {
+    final state = _editorState;
+    if (state == null) return;
+    final selection = state.selection;
+    if (selection == null) return;
+
+    if (type.startsWith('heading')) {
+      final level = int.parse(type.substring(7));
+      state.formatNode(
+        selection,
+        (node) => node.copyWith(
+          type: HeadingBlockKeys.type,
+          attributes: {
+            HeadingBlockKeys.level: level,
+            blockComponentBackgroundColor:
+                node.attributes[blockComponentBackgroundColor],
+            blockComponentTextDirection:
+                node.attributes[blockComponentTextDirection],
+            blockComponentDelta: (node.delta ?? Delta()).toJson(),
+          },
+        ),
+      );
+    } else {
+      state.formatNode(
+        selection,
+        (node) => node.copyWith(
+          type: type,
+          attributes: {
+            blockComponentBackgroundColor:
+                node.attributes[blockComponentBackgroundColor],
+            blockComponentTextDirection:
+                node.attributes[blockComponentTextDirection],
+            blockComponentDelta: (node.delta ?? Delta()).toJson(),
+          },
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = AppTheme.colorsOf(context);
@@ -296,8 +414,10 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
     Widget contentChild;
 
     if (activePageId == null) {
-      final hasPages = activeSectionId != null &&
-          (ref.watch(pagesProvider(activeSectionId)).value?.isNotEmpty ?? false);
+      final hasPages =
+          activeSectionId != null &&
+          (ref.watch(pagesProvider(activeSectionId)).value?.isNotEmpty ??
+              false);
 
       contentChild = Center(
         key: const ValueKey('empty_state'),
@@ -310,7 +430,8 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
         key: ValueKey(activePageId),
         child: fullPageAsync.when(
           data: (page) {
-            if (page == null) return const Center(child: Text('Page not found'));
+            if (page == null)
+              return const Center(child: Text('Page not found'));
 
             if (_currentlyLoadedPageId != page.id) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -341,9 +462,15 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
               editorState: _editorState!,
               editorScrollController: _editorScrollController!,
               child: Padding(
-                padding: isMobileWidth 
-                    ? const EdgeInsets.symmetric(horizontal: 16.0, vertical: 24.0)
-                    : const EdgeInsets.symmetric(horizontal: 60.0, vertical: 40.0),
+                padding: isMobileWidth
+                    ? const EdgeInsets.symmetric(
+                        horizontal: 16.0,
+                        vertical: 24.0,
+                      ).copyWith(top: 0)
+                    : const EdgeInsets.symmetric(
+                        horizontal: 60.0,
+                        vertical: 40.0,
+                      ).copyWith(top: 0),
                 child: AppFlowyEditor(
                   editorState: _editorState!,
                   editorScrollController: _editorScrollController!,
@@ -351,11 +478,12 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
                     ...standardBlockComponentBuilderMap,
                     'title': HeadingBlockComponentBuilder(
                       configuration: BlockComponentConfiguration(
-                        padding: (node) => const EdgeInsets.only(top: 32.0, bottom: 16.0),
+                        padding: (node) =>
+                            const EdgeInsets.only(top: 32.0, bottom: 16.0),
                       ),
                       textStyleBuilder: (level) => GoogleFonts.getFont(
                         settings.fontTitle,
-                        fontSize: 36,
+                        fontSize: settings.defaultFontSize * 2.25,
                         fontWeight: FontWeight.bold,
                         color: colors.accent,
                         height: 1.2,
@@ -364,13 +492,25 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
                     HeadingBlockKeys.type: HeadingBlockComponentBuilder(
                       configuration: BlockComponentConfiguration(
                         padding: (node) {
-                          final level = node.attributes[HeadingBlockKeys.level] as int? ?? 1;
-                          return EdgeInsets.only(top: 28.0 - (level * 2), bottom: 8.0);
+                          final level =
+                              node.attributes[HeadingBlockKeys.level] as int? ??
+                              1;
+                          return EdgeInsets.only(
+                            top: 28.0 - (level * 2),
+                            bottom: 8.0,
+                          );
                         },
                       ),
                       textStyleBuilder: (level) => GoogleFonts.getFont(
                         settings.fontHeadings,
-                        fontSize: level == 1 ? 28 : level == 2 ? 24 : level == 3 ? 20 : 18,
+                        fontSize: settings.defaultFontSize *
+                            (level == 1
+                                ? 1.75
+                                : level == 2
+                                ? 1.5
+                                : level == 3
+                                ? 1.25
+                                : 1.125),
                         fontWeight: FontWeight.w700,
                         color: colors.inkPrimary,
                         height: 1.3,
@@ -378,16 +518,16 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
                     ),
                     TableBlockKeys.type: TableBlockComponentBuilder(
                       configuration: BlockComponentConfiguration(
-                        padding: (node) => const EdgeInsets.symmetric(vertical: 16.0),
+                        padding: (node) =>
+                            const EdgeInsets.symmetric(vertical: 16.0),
                         indentPadding: (node, dir) => EdgeInsets.zero,
                       ),
-                      tableStyle: const TableStyle(
-                        colWidth: 320,
-                      ),
+                      tableStyle: const TableStyle(colWidth: 320),
                     ),
                     'code': CustomCodeBlockComponentBuilder(
                       configuration: BlockComponentConfiguration(
-                        padding: (node) => const EdgeInsets.symmetric(vertical: 16.0),
+                        padding: (node) =>
+                            const EdgeInsets.symmetric(vertical: 16.0),
                       ),
                     ),
                   },
@@ -404,6 +544,7 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
                       ),
                       code: GoogleFonts.getFont(
                         settings.fontCode,
+                        fontSize: settings.defaultFontSize * 0.9,
                         color: colors.inkPrimary,
                         backgroundColor: colors.surfacePanel,
                         height: 1.5,
@@ -412,10 +553,14 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
                   ),
                   commandShortcutEvents: [
                     _customPasteCommand,
-                    ...standardCommandShortcutEvents.where((e) => e.key != 'paste the content'),
+                    ...standardCommandShortcutEvents.where(
+                      (e) => e.key != 'paste the content',
+                    ),
                   ],
                   characterShortcutEvents: [
-                    ...standardCharacterShortcutEvents.where((e) => e != slashCommand),
+                    ...standardCharacterShortcutEvents.where(
+                      (e) => e != slashCommand,
+                    ),
                     customSlashCommand(
                       standardSelectionMenuItems,
                       style: SelectionMenuStyle(
@@ -437,7 +582,9 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
                       ),
                     ),
                   ],
-                  contextMenuBuilder: (context, position, editorState, onPressed) => const SizedBox.shrink(),
+                  contextMenuBuilder:
+                      (context, position, editorState, onPressed) =>
+                          const SizedBox.shrink(),
                 ),
               ),
             );
@@ -452,7 +599,11 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
       color: colors.surfaceBase,
       child: Column(
         children: [
-          _TopBar(colors: colors, editorState: activePageId == null ? null : _editorState, settings: settings),
+          _TopBar(
+            colors: colors,
+            editorState: activePageId == null ? null : _editorState,
+            settings: settings,
+          ),
           Expanded(
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 250),
@@ -466,7 +617,11 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
 }
 
 class _TopBar extends ConsumerStatefulWidget {
-  const _TopBar({required this.colors, required this.editorState, required this.settings});
+  const _TopBar({
+    required this.colors,
+    required this.editorState,
+    required this.settings,
+  });
   final AppColors colors;
   final EditorState? editorState;
   final SettingsState settings;
@@ -477,8 +632,8 @@ class _TopBar extends ConsumerStatefulWidget {
 
 class _TopBarState extends ConsumerState<_TopBar> {
   String _currentBlockType = ParagraphBlockKeys.type;
-  String _currentFontFamily = 'Inter';
-  double _currentFontSize = 14.0;
+  late String _currentFontFamily = widget.settings.fontParagraph;
+  late double _currentFontSize = widget.settings.defaultFontSize;
   bool _isCollapsed = false;
 
   Selection? _lastSelection;
@@ -493,7 +648,9 @@ class _TopBarState extends ConsumerState<_TopBar> {
   void didUpdateWidget(_TopBar oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.editorState != widget.editorState) {
-      oldWidget.editorState?.selectionNotifier.removeListener(_onSelectionChanged);
+      oldWidget.editorState?.selectionNotifier.removeListener(
+        _onSelectionChanged,
+      );
       widget.editorState?.selectionNotifier.addListener(_onSelectionChanged);
     }
   }
@@ -520,9 +677,15 @@ class _TopBarState extends ConsumerState<_TopBar> {
         }
         // Only update if it's a known type in our dropdown
         final knownTypes = {
-          ParagraphBlockKeys.type, 'heading1', 'heading2', 'heading3',
-          BulletedListBlockKeys.type, NumberedListBlockKeys.type,
-          TodoListBlockKeys.type, QuoteBlockKeys.type, 'code',
+          ParagraphBlockKeys.type,
+          'heading1',
+          'heading2',
+          'heading3',
+          BulletedListBlockKeys.type,
+          NumberedListBlockKeys.type,
+          TodoListBlockKeys.type,
+          QuoteBlockKeys.type,
+          'code',
         };
         if (knownTypes.contains(blockType) && blockType != _currentBlockType) {
           setState(() => _currentBlockType = blockType);
@@ -534,24 +697,34 @@ class _TopBarState extends ConsumerState<_TopBar> {
     }
   }
 
-  void _updateFontFormattingState(EditorState editorState, Selection selection) {
+  void _updateFontFormattingState(
+    EditorState editorState,
+    Selection selection,
+  ) {
     if (selection.isCollapsed) {
       // 1. Check toggled style first (for newly typed text)
       final toggledStyle = editorState.toggledStyle;
-      String? toggledFont = toggledStyle[AppFlowyRichTextKeys.fontFamily] as String?;
-      double? toggledSize = toggledStyle[AppFlowyRichTextKeys.fontSize] as double?;
+      String? toggledFont =
+          toggledStyle[AppFlowyRichTextKeys.fontFamily] as String?;
+      double? toggledSize =
+          toggledStyle[AppFlowyRichTextKeys.fontSize] as double?;
 
       // 2. If not in toggled style, check the character before the cursor
       if (toggledFont == null || toggledSize == null) {
-        final attributes = editorState.getDeltaAttributesInSelectionStart(selection);
+        final attributes = editorState.getDeltaAttributesInSelectionStart(
+          selection,
+        );
         if (attributes != null) {
-          toggledFont ??= attributes[AppFlowyRichTextKeys.fontFamily] as String?;
+          toggledFont ??=
+              attributes[AppFlowyRichTextKeys.fontFamily] as String?;
           toggledSize ??= attributes[AppFlowyRichTextKeys.fontSize] as double?;
         }
       }
 
       setState(() {
-        _currentFontFamily = toggledFont != null ? _reverseResolveGoogleFont(toggledFont) : widget.settings.fontParagraph;
+        _currentFontFamily = toggledFont != null
+            ? _reverseResolveGoogleFont(toggledFont)
+            : widget.settings.fontParagraph;
         _currentFontSize = toggledSize ?? widget.settings.defaultFontSize;
       });
     } else {
@@ -563,11 +736,11 @@ class _TopBarState extends ConsumerState<_TopBar> {
       for (final node in nodes) {
         final delta = node.delta;
         if (delta == null) continue;
-        
+
         // Calculate intersection with selection
         int startOffset = 0;
         int endOffset = delta.length;
-        
+
         if (node.path.equals(selection.start.path)) {
           startOffset = selection.start.offset;
         }
@@ -577,18 +750,22 @@ class _TopBarState extends ConsumerState<_TopBar> {
 
         final ops = delta.whereType<TextInsert>();
         int currentOffset = 0;
-        
+
         for (final op in ops) {
           final opStart = currentOffset;
           final opEnd = currentOffset + op.length;
-          
+
           // Check overlap
           if (opStart < endOffset && opEnd > startOffset) {
             final attrs = op.attributes;
             final font = attrs?[AppFlowyRichTextKeys.fontFamily] as String?;
             final size = attrs?[AppFlowyRichTextKeys.fontSize] as double?;
-            
-            fontFamilies.add(font != null ? _reverseResolveGoogleFont(font) : widget.settings.fontParagraph);
+
+            fontFamilies.add(
+              font != null
+                  ? _reverseResolveGoogleFont(font)
+                  : widget.settings.fontParagraph,
+            );
             fontSizes.add(size ?? widget.settings.defaultFontSize);
           }
           currentOffset += op.length;
@@ -615,7 +792,9 @@ class _TopBarState extends ConsumerState<_TopBar> {
     }
   }
 
-  void _restoreSelectionAndRun(void Function(EditorState editorState, Selection selection) action) {
+  void _restoreSelectionAndRun(
+    void Function(EditorState editorState, Selection selection) action,
+  ) {
     final editorState = widget.editorState;
     if (editorState == null) return;
     final selection = _lastSelection ?? editorState.selection;
@@ -681,7 +860,18 @@ class _TopBarState extends ConsumerState<_TopBar> {
   }
 
   String _reverseResolveGoogleFont(String internalName) {
-    const displayNames = ['Inter', 'Merriweather', 'JetBrains Mono', 'Roboto', 'Open Sans', 'Lato', 'Poppins', 'Montserrat', 'Playfair Display', 'Source Code Pro'];
+    const displayNames = [
+      'Inter',
+      'Merriweather',
+      'JetBrains Mono',
+      'Roboto',
+      'Open Sans',
+      'Lato',
+      'Poppins',
+      'Montserrat',
+      'Playfair Display',
+      'Source Code Pro',
+    ];
     for (final name in displayNames) {
       if (_resolveGoogleFont(name) == internalName) {
         return name;
@@ -694,12 +884,14 @@ class _TopBarState extends ConsumerState<_TopBar> {
     final resolvedFamily = _resolveGoogleFont(fontFamily);
     _restoreSelectionAndRun((editorState, selection) {
       if (selection.isCollapsed) {
-        editorState.updateToggledStyle(AppFlowyRichTextKeys.fontFamily, resolvedFamily);
-      } else {
-        editorState.formatDelta(
-          selection,
-          {AppFlowyRichTextKeys.fontFamily: resolvedFamily},
+        editorState.updateToggledStyle(
+          AppFlowyRichTextKeys.fontFamily,
+          resolvedFamily,
         );
+      } else {
+        editorState.formatDelta(selection, {
+          AppFlowyRichTextKeys.fontFamily: resolvedFamily,
+        });
       }
     });
   }
@@ -709,10 +901,9 @@ class _TopBarState extends ConsumerState<_TopBar> {
       if (selection.isCollapsed) {
         editorState.updateToggledStyle(AppFlowyRichTextKeys.fontSize, size);
       } else {
-        editorState.formatDelta(
-          selection,
-          {AppFlowyRichTextKeys.fontSize: size},
-        );
+        editorState.formatDelta(selection, {
+          AppFlowyRichTextKeys.fontSize: size,
+        });
       }
     });
   }
@@ -723,12 +914,10 @@ class _TopBarState extends ConsumerState<_TopBar> {
     final selection = _lastSelection ?? editorState.selection;
     if (selection == null) return;
 
-    final tableNode = TableNode.fromList(
-      [
-        ['', ''],
-        ['', ''],
-      ],
-    );
+    final tableNode = TableNode.fromList([
+      ['', ''],
+      ['', ''],
+    ]);
 
     final transaction = editorState.transaction;
     transaction.insertNode(selection.end.path.next, tableNode.node);
@@ -763,9 +952,8 @@ class _TopBarState extends ConsumerState<_TopBar> {
                     _iconBtn(Icons.arrow_back_rounded, 'Back', () {
                       ref.read(mobileNavIndexProvider.notifier).back();
                     }),
-                  if (isMobileWidth)
-                    const SizedBox(width: AppSpacing.sm),
-                    
+                  if (isMobileWidth) const SizedBox(width: AppSpacing.sm),
+
                   if (!isMobileWidth && !showSections)
                     _iconBtn(Icons.view_sidebar_outlined, 'Show sections', () {
                       ref.read(sectionsPaneVisibleProvider.notifier).toggle();
@@ -782,20 +970,24 @@ class _TopBarState extends ConsumerState<_TopBar> {
 
                   // Collapse button
                   _iconBtn(
-                    _isCollapsed ? Icons.chevron_right_rounded : Icons.chevron_left_rounded, 
-                    _isCollapsed ? 'Expand formatting options' : 'Collapse formatting options', 
+                    _isCollapsed
+                        ? Icons.chevron_right_rounded
+                        : Icons.chevron_left_rounded,
+                    _isCollapsed
+                        ? 'Expand formatting options'
+                        : 'Collapse formatting options',
                     () {
                       setState(() {
                         _isCollapsed = !_isCollapsed;
                       });
-                    }
+                    },
                   ),
 
                   if (!_isCollapsed) ...[
                     const SizedBox(width: AppSpacing.sm),
                     Container(width: 1, height: 20, color: colors.border),
                     const SizedBox(width: AppSpacing.sm),
-                    
+
                     // Undo / Redo
                     _iconBtn(Icons.undo_rounded, 'Undo', () {
                       editorState?.undoManager.undo();
@@ -806,23 +998,58 @@ class _TopBarState extends ConsumerState<_TopBar> {
                     const SizedBox(width: AppSpacing.sm),
                     Container(width: 1, height: 20, color: colors.border),
                     const SizedBox(width: AppSpacing.sm),
-                    
+
                     // Block type switcher
                     DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
                         value: _currentBlockType,
-                        icon: Icon(Icons.arrow_drop_down, color: colors.inkMuted, size: 16),
-                        style: TextStyle(color: colors.inkPrimary, fontSize: 13, fontFamily: 'Inter'),
+                        icon: Icon(
+                          Icons.arrow_drop_down,
+                          color: colors.inkMuted,
+                          size: 16,
+                        ),
+                        style: TextStyle(
+                          color: colors.inkPrimary,
+                          fontSize: 13,
+                          fontFamily: 'Inter',
+                        ),
                         items: [
-                          DropdownMenuItem(value: ParagraphBlockKeys.type, child: const Text('Normal text')),
-                          const DropdownMenuItem(value: 'heading1', child: Text('Heading 1')),
-                          const DropdownMenuItem(value: 'heading2', child: Text('Heading 2')),
-                          const DropdownMenuItem(value: 'heading3', child: Text('Subheading')),
-                          DropdownMenuItem(value: BulletedListBlockKeys.type, child: const Text('Bulleted list')),
-                          DropdownMenuItem(value: NumberedListBlockKeys.type, child: const Text('Numbered list')),
-                          DropdownMenuItem(value: TodoListBlockKeys.type, child: const Text('Checklist')),
-                          DropdownMenuItem(value: QuoteBlockKeys.type, child: const Text('Quote')),
-                          const DropdownMenuItem(value: 'code', child: Text('Code block')),
+                          DropdownMenuItem(
+                            value: ParagraphBlockKeys.type,
+                            child: const Text('Normal text'),
+                          ),
+                          const DropdownMenuItem(
+                            value: 'heading1',
+                            child: Text('Heading 1'),
+                          ),
+                          const DropdownMenuItem(
+                            value: 'heading2',
+                            child: Text('Heading 2'),
+                          ),
+                          const DropdownMenuItem(
+                            value: 'heading3',
+                            child: Text('Subheading'),
+                          ),
+                          DropdownMenuItem(
+                            value: BulletedListBlockKeys.type,
+                            child: const Text('Bulleted list'),
+                          ),
+                          DropdownMenuItem(
+                            value: NumberedListBlockKeys.type,
+                            child: const Text('Numbered list'),
+                          ),
+                          DropdownMenuItem(
+                            value: TodoListBlockKeys.type,
+                            child: const Text('Checklist'),
+                          ),
+                          DropdownMenuItem(
+                            value: QuoteBlockKeys.type,
+                            child: const Text('Quote'),
+                          ),
+                          const DropdownMenuItem(
+                            value: 'code',
+                            child: Text('Code block'),
+                          ),
                         ],
                         onChanged: (val) {
                           if (editorState != null && val != null) {
@@ -832,29 +1059,67 @@ class _TopBarState extends ConsumerState<_TopBar> {
                         },
                       ),
                     ),
-                    
+
                     const SizedBox(width: AppSpacing.sm),
                     Container(width: 1, height: 20, color: colors.border),
                     const SizedBox(width: AppSpacing.sm),
-                    
+
                     // Font family selector
                     DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
                         value: _currentFontFamily,
-                        icon: Icon(Icons.arrow_drop_down, color: colors.inkMuted, size: 16),
-                        style: TextStyle(color: colors.inkPrimary, fontSize: 13, fontFamily: 'Inter'),
+                        icon: Icon(
+                          Icons.arrow_drop_down,
+                          color: colors.inkMuted,
+                          size: 16,
+                        ),
+                        style: TextStyle(
+                          color: colors.inkPrimary,
+                          fontSize: 13,
+                          fontFamily: 'Inter',
+                        ),
                         items: const [
-                          DropdownMenuItem(value: 'Variable', child: Text('Multiple fonts')),
-                          DropdownMenuItem(value: 'Inter', child: Text('Inter')),
-                          DropdownMenuItem(value: 'Merriweather', child: Text('Merriweather')),
-                          DropdownMenuItem(value: 'JetBrains Mono', child: Text('JetBrains Mono')),
-                          DropdownMenuItem(value: 'Roboto', child: Text('Roboto')),
-                          DropdownMenuItem(value: 'Open Sans', child: Text('Open Sans')),
+                          DropdownMenuItem(
+                            value: 'Variable',
+                            child: Text('Multiple fonts'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'Inter',
+                            child: Text('Inter'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'Merriweather',
+                            child: Text('Merriweather'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'JetBrains Mono',
+                            child: Text('JetBrains Mono'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'Roboto',
+                            child: Text('Roboto'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'Open Sans',
+                            child: Text('Open Sans'),
+                          ),
                           DropdownMenuItem(value: 'Lato', child: Text('Lato')),
-                          DropdownMenuItem(value: 'Poppins', child: Text('Poppins')),
-                          DropdownMenuItem(value: 'Montserrat', child: Text('Montserrat')),
-                          DropdownMenuItem(value: 'Playfair Display', child: Text('Playfair Display')),
-                          DropdownMenuItem(value: 'Source Code Pro', child: Text('Source Code Pro')),
+                          DropdownMenuItem(
+                            value: 'Poppins',
+                            child: Text('Poppins'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'Montserrat',
+                            child: Text('Montserrat'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'Playfair Display',
+                            child: Text('Playfair Display'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'Source Code Pro',
+                            child: Text('Source Code Pro'),
+                          ),
                         ],
                         onChanged: (val) {
                           if (editorState != null && val != null) {
@@ -864,21 +1129,51 @@ class _TopBarState extends ConsumerState<_TopBar> {
                         },
                       ),
                     ),
-                    
+
                     const SizedBox(width: AppSpacing.sm),
-                    
+
                     // Font size selector
                     DropdownButtonHideUnderline(
                       child: DropdownButton<double>(
                         value: _currentFontSize,
-                        icon: Icon(Icons.arrow_drop_down, color: colors.inkMuted, size: 16),
-                        style: TextStyle(color: colors.inkPrimary, fontSize: 13, fontFamily: 'Inter'),
-                        items: [-1.0, 10.0, 11.0, 12.0, 13.0, 14.0, 16.0, 18.0, 20.0, 24.0, 28.0, 32.0, 36.0, 48.0].map((size) {
-                          if (size == -1.0) {
-                            return const DropdownMenuItem(value: -1.0, child: Text('Multiple'));
-                          }
-                          return DropdownMenuItem(value: size, child: Text('${size.toInt()}'));
-                        }).toList(),
+                        icon: Icon(
+                          Icons.arrow_drop_down,
+                          color: colors.inkMuted,
+                          size: 16,
+                        ),
+                        style: TextStyle(
+                          color: colors.inkPrimary,
+                          fontSize: 13,
+                          fontFamily: 'Inter',
+                        ),
+                        items:
+                            [
+                              -1.0,
+                              10.0,
+                              11.0,
+                              12.0,
+                              13.0,
+                              14.0,
+                              16.0,
+                              18.0,
+                              20.0,
+                              24.0,
+                              28.0,
+                              32.0,
+                              36.0,
+                              48.0,
+                            ].map((size) {
+                              if (size == -1.0) {
+                                return const DropdownMenuItem(
+                                  value: -1.0,
+                                  child: Text('Multiple'),
+                                );
+                              }
+                              return DropdownMenuItem(
+                                value: size,
+                                child: Text('${size.toInt()}'),
+                              );
+                            }).toList(),
                         onChanged: (val) {
                           if (editorState != null && val != null) {
                             setState(() => _currentFontSize = val);
@@ -887,19 +1182,23 @@ class _TopBarState extends ConsumerState<_TopBar> {
                         },
                       ),
                     ),
-                    
+
                     const SizedBox(width: AppSpacing.sm),
                     Container(width: 1, height: 20, color: colors.border),
                     const SizedBox(width: AppSpacing.sm),
-                    
+
                     // Insert table
-                    _iconBtn(Icons.table_chart_outlined, 'Insert Table', _insertTable),
+                    _iconBtn(
+                      Icons.table_chart_outlined,
+                      'Insert Table',
+                      _insertTable,
+                    ),
                   ],
                 ],
               ),
             ),
           ),
-          
+
           // Right side fixed items
           if (editorState != null) _exportBtn(),
 
@@ -919,7 +1218,9 @@ class _TopBarState extends ConsumerState<_TopBar> {
     return IconButton(
       icon: Icon(
         icon,
-        color: onPressed != null ? widget.colors.inkSecondary : widget.colors.inkMuted,
+        color: onPressed != null
+            ? widget.colors.inkSecondary
+            : widget.colors.inkMuted,
         size: 18,
       ),
       onPressed: onPressed ?? () {},
@@ -943,16 +1244,21 @@ class _TopBarState extends ConsumerState<_TopBar> {
       onSelected: (value) async {
         if (widget.editorState == null) return;
         final contentStr = jsonEncode(widget.editorState!.document.toJson());
-        
+
         final title = _extractTitle(widget.editorState!.document);
-        final safeTitle = title.isEmpty ? 'Untitled' : title.replaceAll(RegExp(r'[^\w\s]+'), '').replaceAll(' ', '_');
+        final safeTitle = title.isEmpty
+            ? 'Untitled'
+            : title.replaceAll(RegExp(r'[^\w\s]+'), '').replaceAll(' ', '_');
 
         if (value == 'markdown') {
           final confirmed = await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
               backgroundColor: widget.colors.surfacePanel,
-              title: Text('Export Markdown', style: TextStyle(color: widget.colors.inkPrimary)),
+              title: Text(
+                'Export Markdown',
+                style: TextStyle(color: widget.colors.inkPrimary),
+              ),
               content: Text(
                 'Exporting to Markdown is lossy. Font families and precise font sizes will be dropped.',
                 style: TextStyle(color: widget.colors.inkPrimary),
@@ -960,11 +1266,17 @@ class _TopBarState extends ConsumerState<_TopBar> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(false),
-                  child: Text('Cancel', style: TextStyle(color: widget.colors.inkMuted)),
+                  child: Text(
+                    'Cancel',
+                    style: TextStyle(color: widget.colors.inkMuted),
+                  ),
                 ),
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(true),
-                  child: Text('Continue', style: TextStyle(color: widget.colors.accent)),
+                  child: Text(
+                    'Continue',
+                    style: TextStyle(color: widget.colors.accent),
+                  ),
                 ),
               ],
             ),
@@ -982,11 +1294,17 @@ class _TopBarState extends ConsumerState<_TopBar> {
       itemBuilder: (context) => [
         PopupMenuItem(
           value: 'markdown',
-          child: Text('Export as Markdown', style: TextStyle(color: widget.colors.inkPrimary)),
+          child: Text(
+            'Export as Markdown',
+            style: TextStyle(color: widget.colors.inkPrimary),
+          ),
         ),
         PopupMenuItem(
           value: 'pdf',
-          child: Text('Export as PDF', style: TextStyle(color: widget.colors.inkPrimary)),
+          child: Text(
+            'Export as PDF',
+            style: TextStyle(color: widget.colors.inkPrimary),
+          ),
         ),
       ],
     );
@@ -1034,7 +1352,9 @@ class _PlaceholderState extends State<_Placeholder> {
         Icon(Icons.edit_note_rounded, color: colors.inkMuted, size: 48),
         const SizedBox(height: AppSpacing.md),
         Text(
-          widget.hasPages ? 'Select a page or create a new one' : "Click '+' to get started",
+          widget.hasPages
+              ? 'Select a page or create a new one'
+              : "Click '+' to get started",
           style: TextStyle(color: colors.inkMuted, fontSize: 14),
         ),
       ],
@@ -1082,9 +1402,7 @@ final RegExp _hrefRegex = RegExp(
   r'https?://(?:www\.)?[a-zA-Z0-9\-\.]+\.[a-zA-Z]{2,}(?:/[^\s]*)?',
 );
 
-final RegExp _phoneRegex = RegExp(
-  r'^\+?(?:[0-9][\s-.]?)+[0-9]$',
-);
+final RegExp _phoneRegex = RegExp(r'^\+?(?:[0-9][\s-.]?)+[0-9]$');
 
 extension _SheepEditorPaste on EditorState {
   Future<bool> _pasteHtml(String html) async {
@@ -1143,7 +1461,8 @@ extension _SheepEditorPaste on EditorState {
           Delta delta = Delta();
           if (_hrefRegex.hasMatch(paragraph) ||
               _phoneRegex.hasMatch(paragraph)) {
-            final match = _hrefRegex.firstMatch(paragraph) ??
+            final match =
+                _hrefRegex.firstMatch(paragraph) ??
                 _phoneRegex.firstMatch(paragraph);
             if (match != null) {
               int startPos = match.start;
@@ -1159,8 +1478,9 @@ extension _SheepEditorPaste on EditorState {
                 delta.insert(
                   paragraph.substring(startPos, endPos),
                   attributes: {
-                    AppFlowyRichTextKeys.href:
-                        _phoneRegex.hasMatch(entity) ? 'tel:$entity' : entity,
+                    AppFlowyRichTextKeys.href: _phoneRegex.hasMatch(entity)
+                        ? 'tel:$entity'
+                        : entity,
                   },
                 );
 

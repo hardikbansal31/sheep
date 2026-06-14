@@ -7,6 +7,8 @@ import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../layout/providers.dart';
 import '../sections/providers.dart';
+import '../settings/providers.dart';
+import '../settings/settings_state.dart';
 import 'providers.dart';
 
 final _dateFormat = DateFormat('MMM d, yyyy');
@@ -98,6 +100,7 @@ class _Header extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final uiScale = (ref.watch(settingsProvider).value ?? const SettingsState()).uiScale;
     return Container(
       height: AppSpacing.xxl,
       padding: const EdgeInsets.only(left: AppSpacing.md, right: AppSpacing.xs),
@@ -105,10 +108,10 @@ class _Header extends ConsumerWidget {
       child: Row(
         children: [
           Text(
-            'pages',
+            'Pages',
             style: TextStyle(
               color: colors.inkSecondary,
-              fontSize: 11,
+              fontSize: 11 * uiScale,
               fontWeight: FontWeight.w600,
               letterSpacing: 0.8,
             ),
@@ -175,6 +178,7 @@ class _PageItem extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = AppTheme.colorsOf(context);
+    final uiScale = (ref.watch(settingsProvider).value ?? const SettingsState()).uiScale;
     return Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.sm,
@@ -197,7 +201,7 @@ class _PageItem extends ConsumerWidget {
               items: [
                 PopupMenuItem(
                   value: 'delete',
-                  child: Text('Delete', style: TextStyle(color: Colors.red)),
+                  child: Text('Delete', style: TextStyle(color: Colors.red, fontSize: 14 * uiScale)),
                 ),
               ],
             ).then((value) {
@@ -245,7 +249,7 @@ class _PageItem extends ConsumerWidget {
                     page.title,
                     style: TextStyle(
                       color: isSelected ? colors.accent : colors.inkPrimary,
-                      fontSize: 13,
+                      fontSize: 13 * uiScale,
                       fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
                     ),
                     overflow: TextOverflow.ellipsis,
@@ -253,7 +257,7 @@ class _PageItem extends ConsumerWidget {
                   const SizedBox(height: AppSpacing.xs),
                   Text(
                     _dateFormat.format(page.updatedAt),
-                    style: TextStyle(color: colors.inkMuted, fontSize: 11),
+                    style: TextStyle(color: colors.inkMuted, fontSize: 11 * uiScale),
                   ),
                 ],
               ),

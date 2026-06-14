@@ -38,6 +38,7 @@ class _SettingsContent extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = AppTheme.colorsOf(context);
+    final uiScale = settings.uiScale;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -47,7 +48,7 @@ class _SettingsContent extends ConsumerWidget {
           'Settings',
           style: TextStyle(
             color: colors.inkPrimary,
-            fontSize: 20,
+            fontSize: 20 * uiScale,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -57,10 +58,11 @@ class _SettingsContent extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _SectionTitle(title: 'Appearance', colors: colors),
+                _SectionTitle(title: 'Appearance', colors: colors, uiScale: uiScale),
                 _SettingRow(
                   label: 'Theme',
                   colors: colors,
+                  uiScale: uiScale,
                   child: DropdownButton<ThemeMode>(
                     value: settings.themeMode,
                     icon: Icon(Icons.arrow_drop_down, color: colors.inkMuted),
@@ -80,39 +82,44 @@ class _SettingsContent extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(height: AppSpacing.xl),
-                _SectionTitle(title: 'Typography', colors: colors),
+                _SectionTitle(title: 'Typography', colors: colors, uiScale: uiScale),
                 _FontDropdownRow(
                   label: 'Title Font',
                   value: settings.fontTitle,
                   colors: colors,
+                  uiScale: uiScale,
                   onChanged: (val) => ref.read(settingsProvider.notifier).setFontTitle(val),
                 ),
                 _FontDropdownRow(
                   label: 'Headings Font',
                   value: settings.fontHeadings,
                   colors: colors,
+                  uiScale: uiScale,
                   onChanged: (val) => ref.read(settingsProvider.notifier).setFontHeadings(val),
                 ),
                 _FontDropdownRow(
                   label: 'Paragraph Font',
                   value: settings.fontParagraph,
                   colors: colors,
+                  uiScale: uiScale,
                   onChanged: (val) => ref.read(settingsProvider.notifier).setFontParagraph(val),
                 ),
                 _FontDropdownRow(
                   label: 'Code Font',
                   value: settings.fontCode,
                   colors: colors,
+                  uiScale: uiScale,
                   onChanged: (val) => ref.read(settingsProvider.notifier).setFontCode(val),
                 ),
                 _SettingRow(
                   label: 'Default Font Size',
                   colors: colors,
+                  uiScale: uiScale,
                   child: DropdownButton<double>(
                     value: settings.defaultFontSize,
                     icon: Icon(Icons.arrow_drop_down, color: colors.inkMuted),
                     dropdownColor: colors.surfacePanel,
-                    style: TextStyle(color: colors.inkPrimary, fontSize: 14),
+                    style: TextStyle(color: colors.inkPrimary, fontSize: 14 * uiScale),
                     underline: const SizedBox(),
                     items: [10.0, 11.0, 12.0, 13.0, 14.0, 16.0, 18.0, 20.0, 24.0, 28.0, 32.0, 36.0, 48.0]
                         .map((size) => DropdownMenuItem(value: size, child: Text('${size.toInt()}pt')))
@@ -134,9 +141,10 @@ class _SettingsContent extends ConsumerWidget {
 }
 
 class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({required this.title, required this.colors});
+  const _SectionTitle({required this.title, required this.colors, required this.uiScale});
   final String title;
   final AppColors colors;
+  final double uiScale;
 
   @override
   Widget build(BuildContext context) {
@@ -146,7 +154,7 @@ class _SectionTitle extends StatelessWidget {
         title.toUpperCase(),
         style: TextStyle(
           color: colors.inkSecondary,
-          fontSize: 11,
+          fontSize: 11 * uiScale,
           fontWeight: FontWeight.w600,
           letterSpacing: 0.8,
         ),
@@ -160,11 +168,13 @@ class _SettingRow extends StatelessWidget {
     required this.label,
     required this.child,
     required this.colors,
+    required this.uiScale,
   });
 
   final String label;
   final Widget child;
   final AppColors colors;
+  final double uiScale;
 
   @override
   Widget build(BuildContext context) {
@@ -173,7 +183,7 @@ class _SettingRow extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(color: colors.inkPrimary, fontSize: 14)),
+          Text(label, style: TextStyle(color: colors.inkPrimary, fontSize: 14 * uiScale)),
           child,
         ],
       ),
@@ -186,12 +196,14 @@ class _FontDropdownRow extends StatelessWidget {
     required this.label,
     required this.value,
     required this.colors,
+    required this.uiScale,
     required this.onChanged,
   });
 
   final String label;
   final String value;
   final AppColors colors;
+  final double uiScale;
   final ValueChanged<String> onChanged;
 
   static const _fontOptions = [
@@ -215,11 +227,12 @@ class _FontDropdownRow extends StatelessWidget {
     return _SettingRow(
       label: label,
       colors: colors,
+      uiScale: uiScale,
       child: DropdownButton<String>(
         value: safeValue,
         icon: Icon(Icons.arrow_drop_down, color: colors.inkMuted),
         dropdownColor: colors.surfacePanel,
-        style: TextStyle(color: colors.inkPrimary, fontSize: 14),
+        style: TextStyle(color: colors.inkPrimary, fontSize: 14 * uiScale),
         underline: const SizedBox(),
         items: _fontOptions
             .map((font) => DropdownMenuItem(value: font, child: Text(font)))

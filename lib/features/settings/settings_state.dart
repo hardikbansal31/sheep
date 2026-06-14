@@ -3,11 +3,11 @@ import 'package:flutter/material.dart';
 class SettingsState {
   const SettingsState({
     this.themeMode = ThemeMode.system,
-    this.fontTitle = 'Merriweather',
-    this.fontHeadings = 'Inter',
+    this.fontTitle = 'Playfair Display',
+    this.fontHeadings = 'Merriweather',
     this.fontParagraph = 'Inter',
     this.fontCode = 'JetBrains Mono',
-    this.defaultFontSize = 14.0,
+    this.defaultFontSize = 16.0,
   });
 
   final ThemeMode themeMode;
@@ -34,4 +34,8 @@ class SettingsState {
       defaultFontSize: defaultFontSize ?? this.defaultFontSize,
     );
   }
+}
+
+extension UiScale on SettingsState {
+  double get uiScale => (defaultFontSize / 14.0).clamp(0.8, 1.25);
 }

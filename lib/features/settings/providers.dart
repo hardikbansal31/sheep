@@ -12,12 +12,12 @@ class SettingsNotifier extends AsyncNotifier<SettingsState> {
     final themeStr = await repo.getPreference('theme') ?? 'system';
     final ThemeMode themeMode = _parseThemeMode(themeStr);
     
-    final fontTitle = await repo.getPreference('font_title') ?? 'Merriweather';
-    final fontHeadings = await repo.getPreference('font_headings') ?? 'Inter';
+    final fontTitle = await repo.getPreference('font_title') ?? 'Playfair Display';
+    final fontHeadings = await repo.getPreference('font_headings') ?? 'Merriweather';
     final fontParagraph = await repo.getPreference('font_paragraph') ?? 'Inter';
     final fontCode = await repo.getPreference('font_code') ?? 'JetBrains Mono';
     
-    final fontSizeStr = await repo.getPreference('font_size_default') ?? '14.0';
+    final fontSizeStr = await repo.getPreference('font_size_default') ?? '16.0';
     final defaultFontSize = double.tryParse(fontSizeStr) ?? 14.0;
 
     return SettingsState(
