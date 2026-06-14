@@ -7,6 +7,8 @@ import '../../core/theme/app_theme.dart';
 import '../editor/editor_pane.dart';
 import '../pages/providers.dart';
 import '../sections/providers.dart';
+import '../settings/settings_modal.dart';
+import '../sync/sync_status_dot.dart';
 import 'providers.dart';
 
 /// Linear stack navigator for mobile: Sections → Pages → Editor.
@@ -40,6 +42,21 @@ class MobileShell extends ConsumerWidget {
         centerTitle: false,
         elevation: 0,
         actions: [
+          if (index == 0) ...[
+            IconButton(
+              icon: Icon(Icons.settings_outlined, color: colors.inkSecondary),
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (context) => const SettingsModal(),
+                );
+              },
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8.0),
+              child: SyncStatusDot(),
+            ),
+          ],
           if (index == 0)
             IconButton(
               icon: Icon(Icons.add_rounded, color: colors.inkPrimary),
@@ -75,16 +92,19 @@ class MobileShell extends ConsumerWidget {
             key: const ValueKey(1),
             onTap: () => ref.read(mobileNavIndexProvider.notifier).go(2),
           ),
-          RepaintBoundary(
+          SafeArea(
             key: const ValueKey(2),
-            child: EditorPane(key: editorPaneKey),
+            bottom: false,
+            child: RepaintBoundary(
+              child: EditorPane(key: editorPaneKey),
+            ),
           ),
         ],
       ),
     );
   }
 
-  static const _titles = ['sections', 'pages', 'editor'];
+  static const _titles = ['Sections', 'Pages', 'Editor'];
 }
 
 /// Full-width sections list for mobile.
@@ -121,6 +141,88 @@ class _MobileSections extends ConsumerWidget {
                 onTap: () {
                   ref.read(activeSectionProvider.notifier).select(section.id);
                   onTap();
+                },
+                onLongPress: () {
+                  showModalBottomSheet(
+                    context: context,
+                    backgroundColor: colors.surfacePanel,
+                    builder: (context) => SafeArea(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ListTile(
+                            leading: Icon(Icons.edit, color: colors.inkPrimary),
+                            title: Text('Rename', style: TextStyle(color: colors.inkPrimary)),
+                            onTap: () async {
+                              Navigator.pop(context);
+                              final ctrl = TextEditingController(text: section.title);
+                              final newTitle = await showDialog<String>(
+                                context: context,
+                                builder: (context) => AlertDialog(
+                                  backgroundColor: colors.surfacePanel,
+                                  title: Text('Rename Section', style: TextStyle(color: colors.inkPrimary)),
+                                  content: TextField(
+                                    controller: ctrl,
+                                    autofocus: true,
+                                    style: TextStyle(color: colors.inkPrimary),
+                                    decoration: InputDecoration(
+                                      filled: true,
+                                      fillColor: colors.surfaceBase,
+                                      border: OutlineInputBorder(borderSide: BorderSide(color: colors.border)),
+                                    ),
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context),
+                                      child: Text('Cancel', style: TextStyle(color: colors.inkMuted)),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context, ctrl.text),
+                                      child: Text('Rename', style: TextStyle(color: colors.accent)),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (newTitle != null && newTitle.isNotEmpty) {
+                                await ref.read(syncRepoProvider).updateSectionTitle(section.id, newTitle);
+                              }
+                            },
+                          ),
+                          ListTile(
+                            leading: const Icon(Icons.delete, color: Color(0xFFCF6679)),
+                            title: const Text('Delete', style: TextStyle(color: Color(0xFFCF6679))),
+                            onTap: () async {
+                              Navigator.pop(context);
+                              final confirm = await showDialog<bool>(
+                                context: context,
+                                builder: (context) => AlertDialog(
+                                  backgroundColor: colors.surfacePanel,
+                                  title: Text('Delete Section?', style: TextStyle(color: colors.inkPrimary)),
+                                  content: Text('This will delete all pages inside it.', style: TextStyle(color: colors.inkPrimary)),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context, false),
+                                      child: Text('Cancel', style: TextStyle(color: colors.inkMuted)),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context, true),
+                                      child: const Text('Delete', style: TextStyle(color: Color(0xFFCF6679))),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (confirm == true) {
+                                await ref.read(syncRepoProvider).deleteSection(section.id);
+                                if (ref.read(activeSectionProvider) == section.id) {
+                                  ref.read(activeSectionProvider.notifier).select(null);
+                                }
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
                 },
               );
             },
@@ -183,6 +285,87 @@ class _MobilePages extends ConsumerWidget {
                 onTap: () {
                   ref.read(activePageProvider.notifier).select(page.id);
                   onTap();
+                },
+                onLongPress: () {
+                  showModalBottomSheet(
+                    context: context,
+                    backgroundColor: colors.surfacePanel,
+                    builder: (context) => SafeArea(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ListTile(
+                            leading: Icon(Icons.edit, color: colors.inkPrimary),
+                            title: Text('Rename', style: TextStyle(color: colors.inkPrimary)),
+                            onTap: () async {
+                              Navigator.pop(context);
+                              final ctrl = TextEditingController(text: page.title);
+                              final newTitle = await showDialog<String>(
+                                context: context,
+                                builder: (context) => AlertDialog(
+                                  backgroundColor: colors.surfacePanel,
+                                  title: Text('Rename Page', style: TextStyle(color: colors.inkPrimary)),
+                                  content: TextField(
+                                    controller: ctrl,
+                                    autofocus: true,
+                                    style: TextStyle(color: colors.inkPrimary),
+                                    decoration: InputDecoration(
+                                      filled: true,
+                                      fillColor: colors.surfaceBase,
+                                      border: OutlineInputBorder(borderSide: BorderSide(color: colors.border)),
+                                    ),
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context),
+                                      child: Text('Cancel', style: TextStyle(color: colors.inkMuted)),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context, ctrl.text),
+                                      child: Text('Rename', style: TextStyle(color: colors.accent)),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (newTitle != null && newTitle.isNotEmpty) {
+                                await ref.read(syncRepoProvider).updatePageTitle(page.id, newTitle);
+                              }
+                            },
+                          ),
+                          ListTile(
+                            leading: const Icon(Icons.delete, color: Color(0xFFCF6679)),
+                            title: const Text('Delete', style: TextStyle(color: Color(0xFFCF6679))),
+                            onTap: () async {
+                              Navigator.pop(context);
+                              final confirm = await showDialog<bool>(
+                                context: context,
+                                builder: (context) => AlertDialog(
+                                  backgroundColor: colors.surfacePanel,
+                                  title: Text('Delete Page?', style: TextStyle(color: colors.inkPrimary)),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context, false),
+                                      child: Text('Cancel', style: TextStyle(color: colors.inkMuted)),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context, true),
+                                      child: const Text('Delete', style: TextStyle(color: Color(0xFFCF6679))),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (confirm == true) {
+                                await ref.read(syncRepoProvider).deletePage(page.id);
+                                if (ref.read(activePageProvider) == page.id) {
+                                  ref.read(activePageProvider.notifier).select(null);
+                                }
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
                 },
               );
             },

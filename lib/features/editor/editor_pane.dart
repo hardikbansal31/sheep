@@ -9,6 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/sync/sync_repository.dart';
 import '../../core/providers.dart';
+import 'custom_mobile_toolbar.dart';
 import '../../core/theme/app_theme.dart';
 import '../layout/providers.dart';
 import '../export/export_service.dart';
@@ -610,6 +611,30 @@ class EditorPaneState extends ConsumerState<EditorPane> {
               child: contentChild,
             ),
           ),
+          if (isMobileWidth && _editorState != null)
+            ThemedMobileToolbar(
+              editorState: _editorState!,
+              backgroundColor: colors.surfacePanel,
+              foregroundColor: colors.accent,
+              iconColor: colors.accent,
+              clearDiagonalLineColor: const Color(0xFFCF6679),
+              itemHighlightColor: colors.accent,
+              itemOutlineColor: colors.border,
+              tabbarSelectedBackgroundColor: colors.surfaceHover,
+              tabbarSelectedForegroundColor: colors.accent,
+              primaryColor: colors.accent,
+              onPrimaryColor: colors.surfaceBase,
+              outlineColor: colors.border,
+              toolbarItems: [
+                textDecorationMobileToolbarItem,
+                listMobileToolbarItem,
+                todoListMobileToolbarItem,
+                headingMobileToolbarItem,
+                linkMobileToolbarItem,
+                quoteMobileToolbarItem,
+                codeMobileToolbarItem,
+              ],
+            ),
         ],
       ),
     );
@@ -968,25 +993,26 @@ class _TopBarState extends ConsumerState<_TopBar> {
                     const SizedBox(width: AppSpacing.sm),
                   ],
 
-                  // Collapse button
-                  _iconBtn(
-                    _isCollapsed
-                        ? Icons.chevron_right_rounded
-                        : Icons.chevron_left_rounded,
-                    _isCollapsed
-                        ? 'Expand formatting options'
-                        : 'Collapse formatting options',
-                    () {
-                      setState(() {
-                        _isCollapsed = !_isCollapsed;
-                      });
-                    },
-                  ),
+                  if (!isMobileWidth) ...[
+                    // Collapse button
+                    _iconBtn(
+                      _isCollapsed
+                          ? Icons.chevron_right_rounded
+                          : Icons.chevron_left_rounded,
+                      _isCollapsed
+                          ? 'Expand formatting options'
+                          : 'Collapse formatting options',
+                      () {
+                        setState(() {
+                          _isCollapsed = !_isCollapsed;
+                        });
+                      },
+                    ),
 
-                  if (!_isCollapsed) ...[
-                    const SizedBox(width: AppSpacing.sm),
-                    Container(width: 1, height: 20, color: colors.border),
-                    const SizedBox(width: AppSpacing.sm),
+                    if (!_isCollapsed) ...[
+                      const SizedBox(width: AppSpacing.sm),
+                      Container(width: 1, height: 20, color: colors.border),
+                      const SizedBox(width: AppSpacing.sm),
 
                     // Undo / Redo
                     _iconBtn(Icons.undo_rounded, 'Undo', () {
@@ -1193,6 +1219,7 @@ class _TopBarState extends ConsumerState<_TopBar> {
                       'Insert Table',
                       _insertTable,
                     ),
+                    ],
                   ],
                 ],
               ),

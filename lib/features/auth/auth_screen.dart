@@ -70,8 +70,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
 
     return Scaffold(
       backgroundColor: colors.surfaceBase,
-      body: Center(
-        child: Container(
+      body: SafeArea(
+        child: Center(
+          child: Container(
           width: 380,
           padding: const EdgeInsets.all(32),
           decoration: BoxDecoration(
@@ -206,6 +207,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
             ],
           ),
         ),
+      ),
       ),
     );
   }
