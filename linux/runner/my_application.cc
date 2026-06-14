@@ -4,6 +4,8 @@
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
 #endif
+#include <filesystem>
+#include <string>
 
 #include "flutter/generated_plugin_registrant.h"
 
@@ -53,6 +55,42 @@ static void my_application_activate(GApplication* application) {
   }
 
   gtk_window_set_default_size(window, 1280, 720);
+
+  // Set window icon
+  try {
+    std::filesystem::path exe_path = std::filesystem::canonical("/proc/self/exe");
+    std::filesystem::path app_dir = exe_path.parent_path();
+    std::filesystem::path icon_path = app_dir / "data" / "flutter_assets" / "assets" / "icons" / "sheep_icon.png";
+
+    if (!std::filesystem::exists(icon_path)) {
+      // Try relative to bundle directory (when running from intermediates_do_not_run under flutter run)
+      icon_path = app_dir.parent_path() / "bundle" / "data" / "flutter_assets" / "assets" / "icons" / "sheep_icon.png";
+    }
+
+    if (!std::filesystem::exists(icon_path)) {
+      // Fallback: search up the directory tree for the source assets folder
+      std::filesystem::path current = app_dir;
+      while (current.has_parent_path()) {
+        std::filesystem::path candidate = current / "assets" / "icons" / "sheep_icon.png";
+        if (std::filesystem::exists(candidate)) {
+          icon_path = candidate;
+          break;
+        }
+        current = current.parent_path();
+      }
+    }
+
+    if (std::filesystem::exists(icon_path)) {
+      g_autoptr(GError) error = nullptr;
+      if (!gtk_window_set_icon_from_file(window, icon_path.c_str(), &error)) {
+        g_warning("Failed to set window icon: %s", error->message);
+      }
+    } else {
+      g_warning("Window icon file not found at: %s", icon_path.c_str());
+    }
+  } catch (const std::exception& e) {
+    g_warning("Error locating window icon: %s", e.what());
+  }
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_dart_entrypoint_arguments(
