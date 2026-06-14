@@ -1239,7 +1239,7 @@ class _TopBarState extends ConsumerState<_TopBar> {
   Widget _exportBtn() {
     return PopupMenuButton<String>(
       icon: Icon(Icons.ios_share, color: widget.colors.inkSecondary, size: 18),
-      tooltip: 'Export',
+      tooltip: 'Export (PDF: Ctrl+P)',
       color: widget.colors.surfacePanel,
       onSelected: (value) async {
         if (widget.editorState == null) return;

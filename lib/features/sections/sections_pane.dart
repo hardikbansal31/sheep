@@ -93,11 +93,11 @@ class _Header extends ConsumerWidget {
           const Spacer(),
           IconButton(
             icon: Icon(Icons.view_sidebar_outlined,
-                color: colors.inkMuted, size: 18),
+                color: colors.inkSecondary, size: 18),
             onPressed: () =>
                 ref.read(sectionsPaneVisibleProvider.notifier).toggle(),
             splashRadius: 16,
-            tooltip: 'Toggle sections',
+            tooltip: 'Toggle sections (Ctrl+S)',
           ),
         ],
       ),
@@ -119,14 +119,9 @@ class _BottomBar extends ConsumerWidget {
       ),
       child: Row(
         children: [
+
           IconButton(
-            icon: Icon(Icons.search_rounded, color: colors.inkMuted, size: 18),
-            onPressed: () {},
-            splashRadius: 16,
-            tooltip: 'Search',
-          ),
-          IconButton(
-            icon: Icon(Icons.settings_outlined, color: colors.inkMuted, size: 18),
+            icon: Icon(Icons.settings_outlined, color: colors.inkSecondary, size: 18),
             onPressed: () {
               showDialog(
                 context: context,
@@ -134,11 +129,11 @@ class _BottomBar extends ConsumerWidget {
               );
             },
             splashRadius: 16,
-            tooltip: 'Settings',
+            tooltip: 'Settings (Ctrl+,)',
           ),
           const Spacer(),
           IconButton(
-            icon: Icon(Icons.add_rounded, color: colors.inkMuted, size: 18),
+            icon: Icon(Icons.add_rounded, color: colors.inkSecondary, size: 18),
             onPressed: () async {
               final section = await ref.read(repositoryProvider).createSection('New Section');
               ref.read(activePageProvider.notifier).select(null);
@@ -309,7 +304,7 @@ class _SectionItemState extends ConsumerState<_SectionItem> {
                 children: [
                   Icon(
                     Icons.folder_outlined,
-                    color: widget.isSelected ? colors.accent : colors.inkMuted,
+                    color: widget.isSelected ? colors.accent : colors.inkSecondary,
                     size: 16 * uiScale,
                   ),
                   const SizedBox(width: AppSpacing.sm),

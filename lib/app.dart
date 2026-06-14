@@ -12,9 +12,11 @@ import 'features/search/search_modal.dart';
 import 'features/settings/providers.dart';
 import 'features/settings/settings_modal.dart';
 import 'features/editor/editor_pane.dart';
+import 'core/providers.dart';
 import 'features/editor/providers.dart';
 import 'features/layout/providers.dart';
 import 'features/pages/providers.dart';
+import 'features/sections/providers.dart';
 import 'features/export/export_service.dart';
 import 'features/export/pdf_exporter.dart';
 
@@ -27,6 +29,7 @@ class SettingsIntent extends Intent { const SettingsIntent(); }
 class SectionPanelIntent extends Intent { const SectionPanelIntent(); }
 class PagePanelIntent extends Intent { const PagePanelIntent(); }
 class ExportPdfIntent extends Intent { const ExportPdfIntent(); }
+class NewPageIntent extends Intent { const NewPageIntent(); }
 
 class SheepApp extends ConsumerWidget {
   const SheepApp({super.key});
@@ -64,6 +67,8 @@ class SheepApp extends ConsumerWidget {
               const SingleActivator(LogicalKeyboardKey.keyT, meta: true): const PagePanelIntent(),
               const SingleActivator(LogicalKeyboardKey.keyP, control: true): const ExportPdfIntent(),
               const SingleActivator(LogicalKeyboardKey.keyP, meta: true): const ExportPdfIntent(),
+              const SingleActivator(LogicalKeyboardKey.keyN, control: true): const NewPageIntent(),
+              const SingleActivator(LogicalKeyboardKey.keyN, meta: true): const NewPageIntent(),
             },
             child: Actions(
               actions: <Type, Action<Intent>>{
@@ -140,6 +145,17 @@ class SheepApp extends ConsumerWidget {
                           debugPrint('Error exporting to PDF: $e');
                         }
                       }
+                    }
+                    return null;
+                  },
+                ),
+                NewPageIntent: CallbackAction<NewPageIntent>(
+                  onInvoke: (intent) async {
+                    final activeSectionId = ref.read(activeSectionProvider);
+                    if (activeSectionId != null) {
+                      final repo = ref.read(repositoryProvider);
+                      final page = await repo.createPage(activeSectionId, 'Title');
+                      ref.read(activePageProvider.notifier).select(page.id);
                     }
                     return null;
                   },

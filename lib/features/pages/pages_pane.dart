@@ -16,7 +16,7 @@ final _dateFormat = DateFormat('MMM d, yyyy');
 class PagesPane extends ConsumerWidget {
   const PagesPane({super.key});
 
-  static const double paneWidth = 300;
+  static const double paneWidth = 240;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -118,11 +118,11 @@ class _Header extends ConsumerWidget {
           ),
           const Spacer(),
           IconButton(
-            icon: Icon(Icons.menu_outlined, color: colors.inkMuted, size: 18),
+            icon: Icon(Icons.menu_outlined, color: colors.inkSecondary, size: 18),
             onPressed: () =>
                 ref.read(pagesPaneVisibleProvider.notifier).toggle(),
             splashRadius: 16,
-            tooltip: 'Toggle pages',
+            tooltip: 'Toggle pages (Ctrl+T)',
           ),
         ],
       ),
@@ -146,7 +146,7 @@ class _BottomBar extends ConsumerWidget {
         children: [
           const Spacer(),
           IconButton(
-            icon: Icon(Icons.add_rounded, color: colors.inkMuted, size: 18),
+            icon: Icon(Icons.add_rounded, color: colors.inkSecondary, size: 18),
             onPressed: () async {
               final activeSectionId = ref.read(activeSectionProvider);
               if (activeSectionId != null) {
@@ -156,7 +156,7 @@ class _BottomBar extends ConsumerWidget {
               }
             },
             splashRadius: 16,
-            tooltip: 'New page',
+            tooltip: 'New page (Ctrl+N)',
           ),
         ],
       ),
@@ -257,7 +257,10 @@ class _PageItem extends ConsumerWidget {
                   const SizedBox(height: AppSpacing.xs),
                   Text(
                     _dateFormat.format(page.updatedAt),
-                    style: TextStyle(color: colors.inkMuted, fontSize: 11 * uiScale),
+                    style: TextStyle(
+                      color: isSelected ? colors.accent : colors.inkSecondary,
+                      fontSize: 11 * uiScale,
+                    ),
                   ),
                 ],
               ),
