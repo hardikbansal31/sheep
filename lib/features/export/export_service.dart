@@ -22,6 +22,7 @@ class ExportService {
       final dir = await getApplicationDocumentsDirectory();
       final tempFile = File('${dir.path}/$fileName');
       await tempFile.writeAsString(content);
+      // ignore: deprecated_member_use
       await Share.shareXFiles([XFile(tempFile.path)], subject: 'Exported Note');
     }
   }
@@ -43,6 +44,7 @@ class ExportService {
       final dir = await getApplicationDocumentsDirectory();
       final tempFile = File('${dir.path}/$fileName');
       await tempFile.writeAsBytes(bytes);
+      // ignore: deprecated_member_use
       await Share.shareXFiles([XFile(tempFile.path)], subject: 'Exported Note');
     }
   }

@@ -7,10 +7,9 @@ void main() {
     final jsonStr = '''{"document":{"type":"page","children":[{"type":"paragraph","data":{"delta":[{"insert":"Hello World"}]}}]}}''';
     
     final md = MarkdownExporter.export(jsonStr);
-    print('Markdown:');
-    print(md);
-
+    expect(md, isNotNull);
+    
     final pdfBytes = await PdfExporter.export(jsonStr);
-    print('PDF bytes length: \${pdfBytes.length}');
+    expect(pdfBytes, isNotEmpty);
   });
 }

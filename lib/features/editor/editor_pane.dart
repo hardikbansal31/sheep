@@ -1,5 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
+import 'dart:math' show min, max;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:appflowy_editor/appflowy_editor.dart';
@@ -18,6 +21,7 @@ import '../sections/providers.dart';
 import '../settings/providers.dart';
 import '../settings/settings_state.dart';
 import 'providers.dart';
+import 'spell_check_service.dart';
 
 class EditorPane extends ConsumerStatefulWidget {
   const EditorPane({super.key});
@@ -32,11 +36,18 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
   Timer? _debounceTimer;
   String? _currentlyLoadedPageId;
 
+  final Map<String, List<TextRange>> _misspelledRanges = {};
+  final Map<String, List<({TextRange range, DateTime timestamp})>> _correctedRanges = {};
+  final Map<String, Timer> _spellCheckDebouncers = {};
+
   @override
   void dispose() {
     _debounceTimer?.cancel();
     _editorScrollController?.dispose();
     _editorState?.dispose();
+    for (final debouncer in _spellCheckDebouncers.values) {
+      debouncer.cancel();
+    }
     super.dispose();
   }
 
@@ -82,7 +93,20 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
       shrinkWrap: true,
     );
 
+    // Initial spellcheck for all nodes
+    _spellCheckAllNodes(newEditorState.document);
+
     newEditorState.transactionStream.listen((event) {
+      // Spellcheck on changed nodes
+      for (final op in event.$2.operations) {
+        if (op is UpdateTextOperation) {
+          final node = newEditorState.document.nodeAtPath(op.path);
+          if (node != null && node.delta != null) {
+            _debounceSpellCheckForNode(node);
+          }
+        }
+      }
+
       // Auto-save logic
       _debounceTimer?.cancel();
       _debounceTimer = Timer(const Duration(milliseconds: 500), () async {
@@ -112,6 +136,221 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
       _editorScrollController = newScrollController;
       _currentlyLoadedPageId = page.id;
     });
+  }
+
+  void _spellCheckAllNodes(Document document) {
+    void walk(Node node) {
+      if (node.delta != null) {
+        _debounceSpellCheckForNode(node);
+      }
+      for (final child in node.children) {
+        walk(child);
+      }
+    }
+    walk(document.root);
+  }
+
+  void _debounceSpellCheckForNode(Node node) {
+    final nodeId = node.id;
+    _spellCheckDebouncers[nodeId]?.cancel();
+    _spellCheckDebouncers[nodeId] = Timer(const Duration(milliseconds: 300), () async {
+      final text = node.delta?.toPlainText() ?? '';
+      final ranges = await ref.read(spellCheckServiceProvider).checkSpelling(text);
+
+      final previous = _misspelledRanges[nodeId] ?? [];
+      final correctedList = <({TextRange range, DateTime timestamp})>[];
+
+      // Compare previous misspelled words with current misspelled words
+      final previousWords = previous.map((r) {
+        if (r.start < 0 || r.end > text.length || r.start > r.end) return '';
+        return text.substring(r.start, r.end);
+      }).where((w) => w.isNotEmpty).toSet();
+      
+      final currentMisspelledWords = ranges.map((r) {
+        if (r.start < 0 || r.end > text.length || r.start > r.end) return '';
+        return text.substring(r.start, r.end).toLowerCase();
+      }).toSet();
+
+      for (final prevWord in previousWords) {
+        if (!currentMisspelledWords.contains(prevWord.toLowerCase())) {
+          // Word was corrected, locate it in the current text
+          final escaped = RegExp.escape(prevWord);
+          final matches = RegExp(escaped).allMatches(text);
+          for (final m in matches) {
+            final wordRange = TextRange(start: m.start, end: m.end);
+            final isStillMisspelled = ranges.any((r) => r.start <= m.start && r.end >= m.end);
+            if (!isStillMisspelled) {
+              correctedList.add((range: wordRange, timestamp: DateTime.now()));
+            }
+          }
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _misspelledRanges[nodeId] = ranges;
+          if (correctedList.isNotEmpty) {
+            _correctedRanges[nodeId] = [
+              ...(_correctedRanges[nodeId] ?? []).where((item) => DateTime.now().difference(item.timestamp).inMilliseconds < 1500),
+              ...correctedList,
+            ];
+            // Clear corrected highlight after 1.5s
+            Timer(const Duration(milliseconds: 1500), () {
+              if (mounted) {
+                setState(() {
+                  _correctedRanges[nodeId]?.removeWhere((item) => DateTime.now().difference(item.timestamp).inMilliseconds >= 1500);
+                });
+              }
+            });
+          }
+        });
+      }
+    });
+  }
+
+  TextSpan _customTextSpanDecorator(
+    BuildContext context,
+    Node node,
+    int index,
+    TextInsert text,
+    TextSpan before,
+    TextSpan after,
+  ) {
+    final isMobile = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+    final defaultDecorator = isMobile ? mobileTextSpanDecoratorForAttribute : defaultTextSpanDecoratorForAttribute;
+    final baseSpan = defaultDecorator(context, node, index, text, before, after);
+
+    final nodeId = node.id;
+    final misspelled = _misspelledRanges[nodeId] ?? [];
+    final corrected = _correctedRanges[nodeId] ?? [];
+
+    if (misspelled.isEmpty && corrected.isEmpty) {
+      return baseSpan;
+    }
+
+    final spanStart = index;
+    final spanEnd = index + text.text.length;
+    final spanText = text.text;
+
+    final List<({int start, int end, TextStyle style})> highlights = [];
+
+    for (final range in misspelled) {
+      final start = max(spanStart, range.start);
+      final end = min(spanEnd, range.end);
+      if (start < end) {
+        highlights.add((
+          start: start - spanStart,
+          end: end - spanStart,
+          style: const TextStyle(
+            decoration: TextDecoration.underline,
+            decorationColor: Colors.red,
+            decorationStyle: TextDecorationStyle.wavy,
+          ),
+        ));
+      }
+    }
+
+    for (final item in corrected) {
+      final range = item.range;
+      final start = max(spanStart, range.start);
+      final end = min(spanEnd, range.end);
+      if (start < end) {
+        highlights.add((
+          start: start - spanStart,
+          end: end - spanStart,
+          style: TextStyle(
+            decoration: TextDecoration.underline,
+            decorationColor: Colors.green,
+            decorationStyle: TextDecorationStyle.dashed,
+            backgroundColor: Colors.green.withValues(alpha: 0.1),
+          ),
+        ));
+      }
+    }
+
+    if (highlights.isEmpty) {
+      return baseSpan;
+    }
+
+    highlights.sort((a, b) => a.start.compareTo(b.start));
+
+    final List<InlineSpan> children = [];
+    int lastOffset = 0;
+
+    for (final highlight in highlights) {
+      if (highlight.start > lastOffset) {
+        children.add(TextSpan(
+          text: spanText.substring(lastOffset, highlight.start),
+          style: baseSpan.style,
+        ));
+      }
+
+      children.add(TextSpan(
+        text: spanText.substring(highlight.start, highlight.end),
+        style: baseSpan.style?.merge(highlight.style),
+        recognizer: baseSpan.recognizer,
+        mouseCursor: baseSpan.mouseCursor,
+      ));
+
+      lastOffset = highlight.end;
+    }
+
+    if (lastOffset < spanText.length) {
+      children.add(TextSpan(
+        text: spanText.substring(lastOffset),
+        style: baseSpan.style,
+      ));
+    }
+
+    return TextSpan(
+      children: children,
+    );
+  }
+
+  CommandShortcutEvent get _customPasteCommand {
+    return CommandShortcutEvent(
+      key: 'paste the content',
+      getDescription: () => AppFlowyEditorL10n.current.cmdPasteContent,
+      command: !kIsWeb && Platform.isMacOS ? 'meta+v' : 'ctrl+v',
+      handler: (editorState) {
+        _handleCustomPaste(editorState);
+        return KeyEventResult.handled;
+      },
+    );
+  }
+
+  void _handleCustomPaste(EditorState editorState) async {
+    final clipboardData = await AppFlowyClipboard.getData();
+    final text = clipboardData.text;
+    if (text != null && text.isNotEmpty) {
+      final document = markdownToDocument(text);
+      final children = document.root.children;
+
+      if (children.isNotEmpty) {
+        final firstChild = children.first;
+        final isSinglePlainTextParagraph = children.length == 1 &&
+            firstChild.type == ParagraphBlockKeys.type &&
+            (firstChild.delta == null || !firstChild.delta!.any((op) => op.attributes != null && op.attributes!.isNotEmpty));
+
+        if (isSinglePlainTextParagraph) {
+          await editorState._pastePlainText(text);
+        } else {
+          final selection = editorState.selection;
+          if (selection != null && selection.isCollapsed && children.length == 1 && firstChild.type == ParagraphBlockKeys.type) {
+            final node = editorState.getNodeAtPath(selection.end.path);
+            if (node != null && node.delta != null) {
+              final transaction = editorState.transaction;
+              transaction.insertTextDelta(node, selection.startIndex, firstChild.delta!);
+              editorState.apply(transaction);
+              return;
+            }
+          }
+          await editorState.pasteMultiLineNodes(children.toList());
+        }
+      }
+    } else if (clipboardData.html != null) {
+      await editorState._pasteHtml(clipboardData.html!);
+    }
   }
 
   String _extractTitle(Document document) {
@@ -199,6 +438,7 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
                 editorStyle: EditorStyle.desktop(
                   cursorColor: colors.accent,
                   selectionColor: colors.accent.withValues(alpha: 0.2),
+                  textSpanDecorator: _customTextSpanDecorator,
                   textStyleConfiguration: TextStyleConfiguration(
                     text: GoogleFonts.getFont(
                       settings.fontParagraph,
@@ -212,6 +452,10 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
                     ),
                   ),
                 ),
+                commandShortcutEvents: [
+                  _customPasteCommand,
+                  ...standardCommandShortcutEvents.where((e) => e.key != 'paste the content'),
+                ],
                 characterShortcutEvents: [
                   ...standardCharacterShortcutEvents.where((e) => e != slashCommand),
                   customSlashCommand(
@@ -838,5 +1082,130 @@ class _DelayedLoaderState extends State<_DelayedLoader> {
   Widget build(BuildContext context) {
     if (!_show) return const SizedBox.shrink();
     return const CircularProgressIndicator();
+  }
+}
+
+final RegExp _hrefRegex = RegExp(
+  r'https?://(?:www\.)?[a-zA-Z0-9\-\.]+\.[a-zA-Z]{2,}(?:/[^\s]*)?',
+);
+
+final RegExp _phoneRegex = RegExp(
+  r'^\+?(?:[0-9][\s-.]?)+[0-9]$',
+);
+
+extension _SheepEditorPaste on EditorState {
+  Future<bool> _pasteHtml(String html) async {
+    final nodes = htmlToDocument(html).root.children.toList();
+    // remove the front and back empty line
+    while (nodes.isNotEmpty &&
+        nodes.first.delta?.isEmpty == true &&
+        nodes.first.children.isEmpty) {
+      nodes.removeAt(0);
+    }
+    while (nodes.isNotEmpty &&
+        nodes.last.delta?.isEmpty == true &&
+        nodes.last.children.isEmpty) {
+      nodes.removeLast();
+    }
+    if (nodes.isEmpty) {
+      return false;
+    }
+    if (nodes.length == 1) {
+      await pasteSingleLineNode(nodes.first);
+    } else {
+      await pasteMultiLineNodes(nodes.toList());
+    }
+    return true;
+  }
+
+  Future<void> _pastePlainText(String plainText) async {
+    final selectionAttributes = getDeltaAttributesInSelectionStart();
+    final selection = await deleteSelectionIfNeeded();
+
+    if (selection == null) {
+      return;
+    }
+
+    if (await _maybeConvertToUrlOrPhone(plainText)) {
+      return;
+    }
+
+    final nodes = plainText
+        .split('\n')
+        .map(
+          (paragraph) => paragraph
+            ..replaceAll(r'\r', '')
+            ..trimRight(),
+        )
+        .map((paragraph) {
+          Delta delta = Delta();
+          if (_hrefRegex.hasMatch(paragraph) ||
+              _phoneRegex.hasMatch(paragraph)) {
+            final match = _hrefRegex.firstMatch(paragraph) ??
+                _phoneRegex.firstMatch(paragraph);
+            if (match != null) {
+              int startPos = match.start;
+              int endPos = match.end;
+              final String? entity = match.group(0);
+              if (entity != null) {
+                /// insert the text before the link or phone
+                if (startPos > 0) {
+                  delta.insert(paragraph.substring(0, startPos));
+                }
+
+                /// insert the link or phone
+                delta.insert(
+                  paragraph.substring(startPos, endPos),
+                  attributes: {
+                    AppFlowyRichTextKeys.href:
+                        _phoneRegex.hasMatch(entity) ? 'tel:$entity' : entity,
+                  },
+                );
+
+                /// insert the text after the link or phone
+                if (endPos < paragraph.length) {
+                  delta.insert(paragraph.substring(endPos));
+                }
+              }
+            }
+          } else {
+            delta.insert(paragraph, attributes: selectionAttributes);
+          }
+          return delta;
+        })
+        .map((paragraph) => paragraphNode(delta: paragraph))
+        .toList();
+
+    if (nodes.isEmpty) {
+      return;
+    }
+    if (nodes.length == 1) {
+      await pasteSingleLineNode(nodes.first);
+    } else {
+      await pasteMultiLineNodes(nodes.toList());
+    }
+  }
+
+  Future<bool> _maybeConvertToUrlOrPhone(String plainText) async {
+    final selection = this.selection;
+    if (selection == null ||
+        !selection.isSingle ||
+        selection.isCollapsed ||
+        (!_hrefRegex.hasMatch(plainText) && !_phoneRegex.hasMatch(plainText))) {
+      return false;
+    }
+
+    final node = getNodeAtPath(selection.start.path);
+    if (node == null) {
+      return false;
+    }
+
+    final transaction = this.transaction;
+    final isPhone = _phoneRegex.hasMatch(plainText);
+    transaction.formatText(node, selection.startIndex, selection.length, {
+      AppFlowyRichTextKeys.href: isPhone ? 'tel:$plainText' : plainText,
+    });
+    await apply(transaction);
+    return true;
   }
 }

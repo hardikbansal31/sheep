@@ -1,12 +1,8 @@
-# ZenNotes — Software Requirements Specification (v3)
-
-> **Name note:** "ZenNotes" is a placeholder. At least three existing note-taking apps use this name. Rename before any public release or App Store submission.
-
----
+# Sheep — Software Requirements Specification (v3)
 
 ## 1. Introduction & Product Concept
 
-ZenNotes is a lightweight, distraction-free digital notebook designed for rapid text entry and structured note organization. It balances the minimal, content-first aesthetic of Apple Notes with the structured hierarchy of Microsoft OneNote, without the bloat of either.
+Sheep is a lightweight, distraction-free digital notebook designed for rapid text entry and structured note organization. It balances the minimal, content-first aesthetic of Apple Notes with the structured hierarchy of Microsoft OneNote, without the bloat of either.
 
 ### Core Architectural Pillars
 
