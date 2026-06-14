@@ -1,10 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/database/database.dart';
 import '../../core/providers.dart';
+import '../../core/sync/sync_repository.dart';
 
-final sectionsProvider = StreamProvider<List<Section>>((ref) {
-  final repository = ref.watch(repositoryProvider);
+final sectionsProvider = StreamProvider<List<SyncSection>>((ref) {
+  final repository = ref.watch(syncRepoProvider);
   return repository.watchSections();
 });
 

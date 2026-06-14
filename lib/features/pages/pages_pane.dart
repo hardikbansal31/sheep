@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-import '../../core/database/repository.dart';
+import '../../core/sync/sync_repository.dart';
 import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../layout/providers.dart';
@@ -150,7 +150,7 @@ class _BottomBar extends ConsumerWidget {
             onPressed: () async {
               final activeSectionId = ref.read(activeSectionProvider);
               if (activeSectionId != null) {
-                final repo = ref.read(repositoryProvider);
+                final repo = ref.read(syncRepoProvider);
                 final page = await repo.createPage(activeSectionId, 'Title');
                 ref.read(activePageProvider.notifier).select(page.id);
               }
@@ -207,7 +207,7 @@ class _PageItem extends ConsumerWidget {
             ).then((value) {
               if (!context.mounted) return;
               if (value == 'delete') {
-                final repo = ref.read(repositoryProvider);
+                final repo = ref.read(syncRepoProvider);
                 repo.softDeletePage(page.id);
                 if (isSelected) {
                   ref.read(activePageProvider.notifier).select(null);

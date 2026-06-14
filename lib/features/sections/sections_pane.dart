@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/database/database.dart';
+import '../../core/sync/sync_providers.dart';
+import '../../core/sync/sync_repository.dart';
 import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../layout/providers.dart';
@@ -22,7 +23,7 @@ class SectionsPane extends ConsumerWidget {
     final sectionsAsync = ref.watch(sectionsProvider);
     final activeSectionId = ref.watch(activeSectionProvider);
 
-    ref.listen<AsyncValue<List<Section>>>(sectionsProvider, (previous, next) {
+    ref.listen<AsyncValue<List<SyncSection>>>(sectionsProvider, (previous, next) {
       if (next.hasValue &&
           next.value!.isNotEmpty &&
           ref.read(activeSectionProvider) == null) {
@@ -131,11 +132,13 @@ class _BottomBar extends ConsumerWidget {
             splashRadius: 16,
             tooltip: 'Settings (Ctrl+,)',
           ),
+          const SizedBox(width: AppSpacing.xs),
+          const _SyncStatusDot(),
           const Spacer(),
           IconButton(
             icon: Icon(Icons.add_rounded, color: colors.inkSecondary, size: 18),
             onPressed: () async {
-              final section = await ref.read(repositoryProvider).createSection('New Section');
+              final section = await ref.read(syncRepoProvider).createSection('New Section');
               ref.read(activePageProvider.notifier).select(null);
               ref.read(activeSectionProvider.notifier).select(section.id);
             },
@@ -155,7 +158,7 @@ class _SectionItem extends ConsumerStatefulWidget {
     required this.onTap,
   });
 
-  final Section section;
+  final SyncSection section;
   final bool isSelected;
   final VoidCallback onTap;
 
@@ -195,7 +198,7 @@ class _SectionItemState extends ConsumerState<_SectionItem> {
       // Revert to old name if empty
       _controller.text = widget.section.title;
     } else if (val != widget.section.title) {
-      ref.read(repositoryProvider).updateSectionTitle(widget.section.id, val);
+      ref.read(syncRepoProvider).updateSectionTitle(widget.section.id, val);
     }
     
     setState(() {
@@ -221,7 +224,7 @@ class _SectionItemState extends ConsumerState<_SectionItem> {
           ),
           TextButton(
             onPressed: () {
-              ref.read(repositoryProvider).softDeleteSection(widget.section.id);
+              ref.read(syncRepoProvider).softDeleteSection(widget.section.id);
               if (widget.isSelected) {
                 ref.read(activePageProvider.notifier).select(null);
                 ref.read(activeSectionProvider.notifier).select(null);
@@ -341,6 +344,113 @@ class _SectionItemState extends ConsumerState<_SectionItem> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// A small dot indicator showing the current sync status.
+///
+/// - Pulsing accent dot = actively syncing
+/// - Static green dot = synced and connected
+/// - Grey dot = offline
+/// - Red dot = sync error
+class _SyncStatusDot extends ConsumerWidget {
+  const _SyncStatusDot();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = AppTheme.colorsOf(context);
+    final syncAsync = ref.watch(syncStatusProvider);
+
+    final status = syncAsync.value ?? SyncStatus.offline;
+
+    Color dotColor = colors.inkMuted;
+    String tooltipText = 'Offline';
+    bool pulsing = false;
+
+    switch (status) {
+      case SyncStatus.syncing:
+        dotColor = colors.accent;
+        tooltipText = 'Syncing…';
+        pulsing = true;
+        break;
+      case SyncStatus.synced:
+        dotColor = const Color(0xFF4CAF50);
+        tooltipText = 'Synced';
+        pulsing = false;
+        break;
+      case SyncStatus.offline:
+        dotColor = colors.inkMuted;
+        tooltipText = 'Offline';
+        pulsing = false;
+        break;
+      case SyncStatus.error:
+        dotColor = const Color(0xFFCF6679);
+        tooltipText = 'Sync error';
+        pulsing = false;
+        break;
+    }
+
+    return Tooltip(
+      message: tooltipText,
+      child: pulsing
+          ? _PulsingDot(color: dotColor)
+          : Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: dotColor,
+              ),
+            ),
+    );
+  }
+}
+
+class _PulsingDot extends StatefulWidget {
+  const _PulsingDot({required this.color});
+  final Color color;
+
+  @override
+  State<_PulsingDot> createState() => _PulsingDotState();
+}
+
+class _PulsingDotState extends State<_PulsingDot>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Opacity(
+          opacity: 0.4 + (_controller.value * 0.6),
+          child: Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: widget.color,
+            ),
+          ),
+        );
+      },
     );
   }
 }

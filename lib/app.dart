@@ -19,6 +19,8 @@ import 'features/pages/providers.dart';
 import 'features/sections/providers.dart';
 import 'features/export/export_service.dart';
 import 'features/export/pdf_exporter.dart';
+import 'features/auth/auth_screen.dart';
+import 'core/sync/sync_providers.dart';
 
 class SearchIntent extends Intent { const SearchIntent(); }
 class BulletsIntent extends Intent { const BulletsIntent(); }
@@ -45,8 +47,45 @@ class SheepApp extends ConsumerWidget {
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: themeMode,
-      home: Builder(
-        builder: (context) {
+      initialRoute: '/',
+      routes: {
+        '/': (context) => const AuthWrapper(),
+        '/home': (context) => const MainAppWrapper(),
+      },
+    );
+  }
+}
+
+class AuthWrapper extends ConsumerWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authStateProvider);
+
+    return authState.when(
+      data: (state) {
+        if (state.session != null) {
+          return const MainAppWrapper();
+        }
+        return const AuthScreen();
+      },
+      loading: () => Scaffold(
+        backgroundColor: AppTheme.colorsOf(context).surfaceBase,
+        body: const Center(child: CircularProgressIndicator()),
+      ),
+      error: (_, __) => const AuthScreen(),
+    );
+  }
+}
+
+class MainAppWrapper extends ConsumerWidget {
+  const MainAppWrapper({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Builder(
+      builder: (context) {
           return Shortcuts(
             shortcuts: <ShortcutActivator, Intent>{
               const SingleActivator(LogicalKeyboardKey.keyK, meta: true): const SearchIntent(),
@@ -153,7 +192,7 @@ class SheepApp extends ConsumerWidget {
                   onInvoke: (intent) async {
                     final activeSectionId = ref.read(activeSectionProvider);
                     if (activeSectionId != null) {
-                      final repo = ref.read(repositoryProvider);
+                      final repo = ref.read(syncRepoProvider);
                       final page = await repo.createPage(activeSectionId, 'Title');
                       ref.read(activePageProvider.notifier).select(page.id);
                     }
@@ -168,7 +207,6 @@ class SheepApp extends ConsumerWidget {
             ),
           );
         }
-      ),
     );
   }
 }

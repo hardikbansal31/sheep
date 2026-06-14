@@ -44,7 +44,7 @@ class MobileShell extends ConsumerWidget {
             IconButton(
               icon: Icon(Icons.add_rounded, color: colors.inkPrimary),
               onPressed: () async {
-                final section = await ref.read(repositoryProvider).createSection('New Section');
+                final section = await ref.read(syncRepoProvider).createSection('New Section');
                 ref.read(activePageProvider.notifier).select(null);
                 ref.read(activeSectionProvider.notifier).select(section.id);
                 ref.read(mobileNavIndexProvider.notifier).go(1);
@@ -56,7 +56,7 @@ class MobileShell extends ConsumerWidget {
               onPressed: () async {
                 final activeSectionId = ref.read(activeSectionProvider);
                 if (activeSectionId != null) {
-                  final page = await ref.read(repositoryProvider).createPage(activeSectionId, 'Title');
+                  final page = await ref.read(syncRepoProvider).createPage(activeSectionId, 'Title');
                   ref.read(activePageProvider.notifier).select(page.id);
                   ref.read(mobileNavIndexProvider.notifier).go(2);
                 }

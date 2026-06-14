@@ -7,7 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:appflowy_editor/appflowy_editor.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../../core/database/database.dart' as db;
+import '../../core/sync/sync_repository.dart';
 import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../layout/providers.dart';
@@ -61,7 +61,7 @@ class EditorPaneState extends ConsumerState<EditorPane> {
           final jsonStr = jsonEncode(_editorState!.document.toJson());
           try {
             ref
-                .read(repositoryProvider)
+                .read(syncRepoProvider)
                 .updatePage(_currentlyLoadedPageId!, title, jsonStr);
             ref.invalidate(fullPageProvider(_currentlyLoadedPageId!));
           } catch (_) {}
@@ -77,7 +77,7 @@ class EditorPaneState extends ConsumerState<EditorPane> {
     super.dispose();
   }
 
-  void _initEditorState(db.Page page) {
+  void _initEditorState(SyncPage page) {
     _debounceTimer?.cancel();
     final oldEditorState = _editorState;
     final oldScrollController = _editorScrollController;
@@ -167,7 +167,7 @@ class EditorPaneState extends ConsumerState<EditorPane> {
           final jsonStr = jsonEncode(newEditorState.document.toJson());
           try {
             await ref
-                .read(repositoryProvider)
+                .read(syncRepoProvider)
                 .updatePage(page.id, title, jsonStr);
             ref.invalidate(fullPageProvider(page.id));
           } catch (e) {

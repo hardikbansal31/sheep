@@ -38,6 +38,10 @@ dependencies:
   # --- Desktop Window ---
   window_manager: ^0.5.1
 
+  # --- Sync (Supabase + PowerSync) ---
+  supabase_flutter: ^2.5.4
+  powersync: ^2.2.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
