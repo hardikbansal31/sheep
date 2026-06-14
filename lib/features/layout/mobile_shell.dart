@@ -11,17 +11,60 @@ import '../settings/settings_modal.dart';
 import '../sync/sync_status_dot.dart';
 import 'providers.dart';
 
-/// Linear stack navigator for mobile: Sections → Pages → Editor.
-class MobileShell extends ConsumerWidget {
+class MobileShell extends ConsumerStatefulWidget {
   const MobileShell({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MobileShell> createState() => _MobileShellState();
+}
+
+class _MobileShellState extends ConsumerState<MobileShell> {
+  int _previousIndex = 0;
+
+  @override
+  Widget build(BuildContext context) {
     final index = ref.watch(mobileNavIndexProvider);
     final colors = AppTheme.colorsOf(context);
 
-    return Scaffold(
-      backgroundColor: colors.surfaceBase,
+    final isForward = index >= _previousIndex;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _previousIndex = index;
+    });
+
+    Widget activeBody;
+    switch (index) {
+      case 0:
+        activeBody = _MobileSections(
+          key: const ValueKey(0),
+          onTap: () => ref.read(mobileNavIndexProvider.notifier).go(1),
+        );
+        break;
+      case 1:
+        activeBody = _MobilePages(
+          key: const ValueKey(1),
+          onTap: () => ref.read(mobileNavIndexProvider.notifier).go(2),
+        );
+        break;
+      case 2:
+      default:
+        activeBody = SafeArea(
+          key: const ValueKey(2),
+          bottom: false,
+          child: RepaintBoundary(
+            child: EditorPane(key: editorPaneKey),
+          ),
+        );
+        break;
+    }
+
+    return PopScope(
+      canPop: index == 0,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        ref.read(mobileNavIndexProvider.notifier).back();
+      },
+      child: Scaffold(
+        backgroundColor: colors.surfaceBase,
       appBar: index == 2 ? null : AppBar(
         backgroundColor: colors.surfacePanel,
         leading: index > 0
@@ -81,25 +124,29 @@ class MobileShell extends ConsumerWidget {
             ),
         ],
       ),
-      body: IndexedStack(
-        index: index,
-        children: [
-          _MobileSections(
-            key: const ValueKey(0),
-            onTap: () => ref.read(mobileNavIndexProvider.notifier).go(1),
-          ),
-          _MobilePages(
-            key: const ValueKey(1),
-            onTap: () => ref.read(mobileNavIndexProvider.notifier).go(2),
-          ),
-          SafeArea(
-            key: const ValueKey(2),
-            bottom: false,
-            child: RepaintBoundary(
-              child: EditorPane(key: editorPaneKey),
-            ),
-          ),
-        ],
+        body: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          transitionBuilder: (child, animation) {
+            final isEntering = child.key == ValueKey(index);
+            
+            final beginOffset = isEntering
+                ? Offset(isForward ? 1.0 : -1.0, 0.0)
+                : Offset(isForward ? -1.0 : 1.0, 0.0);
+
+            final slideAnimation = Tween<Offset>(
+              begin: beginOffset,
+              end: Offset.zero,
+            ).animate(animation);
+
+            return SlideTransition(
+              position: slideAnimation,
+              child: child,
+            );
+          },
+          child: activeBody,
+        ),
       ),
     );
   }
