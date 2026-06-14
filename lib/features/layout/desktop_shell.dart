@@ -37,8 +37,8 @@ class DesktopShell extends ConsumerWidget {
           VerticalDivider(width: 1, thickness: 1, color: colors.border),
 
         // Editor (always visible)
-        const Expanded(
-          child: RepaintBoundary(child: EditorPane()),
+        Expanded(
+          child: RepaintBoundary(child: EditorPane(key: editorPaneKey)),
         ),
       ],
       ),

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Platform;
-import 'dart:math' show min, max;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -23,6 +22,8 @@ import '../settings/settings_state.dart';
 import 'providers.dart';
 import 'spell_check_service.dart';
 
+final GlobalKey editorPaneKey = GlobalKey(debugLabel: 'editor_pane_key');
+
 class EditorPane extends ConsumerStatefulWidget {
   const EditorPane({super.key});
 
@@ -42,7 +43,20 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
 
   @override
   void dispose() {
-    _debounceTimer?.cancel();
+    if (_debounceTimer?.isActive ?? false) {
+      _debounceTimer!.cancel();
+      if (_currentlyLoadedPageId != null && _editorState != null) {
+        final title = _extractTitle(_editorState!.document);
+        if (title.isNotEmpty) {
+          final jsonStr = jsonEncode(_editorState!.document.toJson());
+          try {
+            ref.read(repositoryProvider).updatePage(_currentlyLoadedPageId!, title, jsonStr);
+            ref.invalidate(fullPageProvider(_currentlyLoadedPageId!));
+          } catch (_) {}
+        }
+      }
+    }
+    
     _editorScrollController?.dispose();
     _editorState?.dispose();
     for (final debouncer in _spellCheckDebouncers.values) {
@@ -124,6 +138,7 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
            final jsonStr = jsonEncode(newEditorState.document.toJson());
            try {
              await ref.read(repositoryProvider).updatePage(page.id, title, jsonStr);
+             ref.invalidate(fullPageProvider(page.id));
            } catch (e) {
              debugPrint('Error saving page: $e');
            }
@@ -208,104 +223,6 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
     });
   }
 
-  TextSpan _customTextSpanDecorator(
-    BuildContext context,
-    Node node,
-    int index,
-    TextInsert text,
-    TextSpan before,
-    TextSpan after,
-  ) {
-    final isMobile = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
-    final defaultDecorator = isMobile ? mobileTextSpanDecoratorForAttribute : defaultTextSpanDecoratorForAttribute;
-    final baseSpan = defaultDecorator(context, node, index, text, before, after);
-
-    final nodeId = node.id;
-    final misspelled = _misspelledRanges[nodeId] ?? [];
-    final corrected = _correctedRanges[nodeId] ?? [];
-
-    if (misspelled.isEmpty && corrected.isEmpty) {
-      return baseSpan;
-    }
-
-    final spanStart = index;
-    final spanEnd = index + text.text.length;
-    final spanText = text.text;
-
-    final List<({int start, int end, TextStyle style})> highlights = [];
-
-    for (final range in misspelled) {
-      final start = max(spanStart, range.start);
-      final end = min(spanEnd, range.end);
-      if (start < end) {
-        highlights.add((
-          start: start - spanStart,
-          end: end - spanStart,
-          style: const TextStyle(
-            decoration: TextDecoration.underline,
-            decorationColor: Colors.red,
-            decorationStyle: TextDecorationStyle.wavy,
-          ),
-        ));
-      }
-    }
-
-    for (final item in corrected) {
-      final range = item.range;
-      final start = max(spanStart, range.start);
-      final end = min(spanEnd, range.end);
-      if (start < end) {
-        highlights.add((
-          start: start - spanStart,
-          end: end - spanStart,
-          style: TextStyle(
-            decoration: TextDecoration.underline,
-            decorationColor: Colors.green,
-            decorationStyle: TextDecorationStyle.dashed,
-            backgroundColor: Colors.green.withValues(alpha: 0.1),
-          ),
-        ));
-      }
-    }
-
-    if (highlights.isEmpty) {
-      return baseSpan;
-    }
-
-    highlights.sort((a, b) => a.start.compareTo(b.start));
-
-    final List<InlineSpan> children = [];
-    int lastOffset = 0;
-
-    for (final highlight in highlights) {
-      if (highlight.start > lastOffset) {
-        children.add(TextSpan(
-          text: spanText.substring(lastOffset, highlight.start),
-          style: baseSpan.style,
-        ));
-      }
-
-      children.add(TextSpan(
-        text: spanText.substring(highlight.start, highlight.end),
-        style: baseSpan.style?.merge(highlight.style),
-        recognizer: baseSpan.recognizer,
-        mouseCursor: baseSpan.mouseCursor,
-      ));
-
-      lastOffset = highlight.end;
-    }
-
-    if (lastOffset < spanText.length) {
-      children.add(TextSpan(
-        text: spanText.substring(lastOffset),
-        style: baseSpan.style,
-      ));
-    }
-
-    return TextSpan(
-      children: children,
-    );
-  }
 
   CommandShortcutEvent get _customPasteCommand {
     return CommandShortcutEvent(
@@ -367,6 +284,7 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
     final activeSectionId = ref.watch(activeSectionProvider);
     final settingsAsync = ref.watch(settingsProvider);
     final settings = settingsAsync.value ?? const SettingsState();
+    final isMobileWidth = MediaQuery.of(context).size.width < 760;
 
     Widget contentChild;
 
@@ -415,74 +333,82 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
               textDirection: TextDirection.ltr,
               editorState: _editorState!,
               editorScrollController: _editorScrollController!,
-              child: AppFlowyEditor(
-                editorState: _editorState!,
-                editorScrollController: _editorScrollController!,
-                blockComponentBuilders: {
-                  ...standardBlockComponentBuilderMap,
-                  'title': HeadingBlockComponentBuilder(
-                    textStyleBuilder: (level) => GoogleFonts.getFont(
-                      settings.fontTitle,
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      color: colors.accent,
+              child: Padding(
+                padding: isMobileWidth 
+                    ? const EdgeInsets.symmetric(horizontal: 16.0, vertical: 24.0)
+                    : const EdgeInsets.symmetric(horizontal: 60.0, vertical: 40.0),
+                child: AppFlowyEditor(
+                  editorState: _editorState!,
+                  editorScrollController: _editorScrollController!,
+                  blockComponentBuilders: {
+                    ...standardBlockComponentBuilderMap,
+                    'title': HeadingBlockComponentBuilder(
+                      textStyleBuilder: (level) => GoogleFonts.getFont(
+                        settings.fontTitle,
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                        color: colors.accent,
+                      ),
+                    ),
+                    HeadingBlockKeys.type: HeadingBlockComponentBuilder(
+                      textStyleBuilder: (level) => GoogleFonts.getFont(
+                        settings.fontHeadings,
+                        color: colors.inkPrimary,
+                      ),
+                    ),
+                  },
+                  editorStyle: EditorStyle.desktop(
+                    padding: EdgeInsets.zero,
+                    cursorColor: colors.accent,
+                    selectionColor: colors.accent.withValues(alpha: 0.2),
+                    textStyleConfiguration: TextStyleConfiguration(
+                      text: GoogleFonts.getFont(
+                        settings.fontParagraph,
+                        fontSize: settings.defaultFontSize,
+                        color: colors.inkPrimary,
+                        height: 1.5,
+                      ),
+                      code: GoogleFonts.getFont(
+                        settings.fontCode,
+                        color: colors.inkPrimary,
+                        backgroundColor: colors.surfacePanel,
+                        height: 1.5,
+                      ),
                     ),
                   ),
-                  HeadingBlockKeys.type: HeadingBlockComponentBuilder(
-                    textStyleBuilder: (level) => GoogleFonts.getFont(
-                      settings.fontHeadings,
-                      color: colors.inkPrimary,
+                  commandShortcutEvents: [
+                    _customPasteCommand,
+                    ...standardCommandShortcutEvents.where((e) => e.key != 'paste the content'),
+                  ],
+                  characterShortcutEvents: [
+                    ...standardCharacterShortcutEvents.where((e) => e != slashCommand),
+                    customSlashCommand(
+                      standardSelectionMenuItems,
+                      style: SelectionMenuStyle(
+                        selectionMenuBackgroundColor: colors.surfacePanel,
+                        selectionMenuItemTextColor: colors.inkPrimary,
+                        selectionMenuItemIconColor: colors.inkPrimary,
+                        selectionMenuItemSelectedTextColor: colors.accent,
+                        selectionMenuItemSelectedIconColor: colors.accent,
+                        selectionMenuItemSelectedColor: Colors.transparent,
+                        selectionMenuUnselectedLabelColor: colors.inkMuted,
+                        selectionMenuDividerColor: colors.border,
+                        selectionMenuLinkBorderColor: colors.border,
+                        selectionMenuInvalidLinkColor: Colors.red,
+                        selectionMenuButtonColor: colors.accent,
+                        selectionMenuButtonTextColor: colors.surfaceBase,
+                        selectionMenuButtonIconColor: colors.surfaceBase,
+                        selectionMenuButtonBorderColor: colors.accent,
+                        selectionMenuTabIndicatorColor: colors.accent,
+                      ),
                     ),
-                  ),
-                },
-                editorStyle: EditorStyle.desktop(
-                  cursorColor: colors.accent,
-                  selectionColor: colors.accent.withValues(alpha: 0.2),
-                  textSpanDecorator: _customTextSpanDecorator,
-                  textStyleConfiguration: TextStyleConfiguration(
-                    text: GoogleFonts.getFont(
-                      settings.fontParagraph,
-                      fontSize: settings.defaultFontSize,
-                      color: colors.inkPrimary,
-                    ),
-                    code: GoogleFonts.getFont(
-                      settings.fontCode,
-                      color: colors.inkPrimary,
-                      backgroundColor: colors.surfacePanel,
-                    ),
-                  ),
+                  ],
+                  contextMenuBuilder: (context, position, editorState, onPressed) => const SizedBox.shrink(),
                 ),
-                commandShortcutEvents: [
-                  _customPasteCommand,
-                  ...standardCommandShortcutEvents.where((e) => e.key != 'paste the content'),
-                ],
-                characterShortcutEvents: [
-                  ...standardCharacterShortcutEvents.where((e) => e != slashCommand),
-                  customSlashCommand(
-                    standardSelectionMenuItems,
-                    style: SelectionMenuStyle(
-                      selectionMenuBackgroundColor: colors.surfacePanel,
-                      selectionMenuItemTextColor: colors.inkPrimary,
-                      selectionMenuItemIconColor: colors.inkPrimary,
-                      selectionMenuItemSelectedTextColor: colors.accent,
-                      selectionMenuItemSelectedIconColor: colors.accent,
-                      selectionMenuItemSelectedColor: Colors.transparent,
-                      selectionMenuUnselectedLabelColor: colors.inkMuted,
-                      selectionMenuDividerColor: colors.border,
-                      selectionMenuLinkBorderColor: colors.border,
-                      selectionMenuInvalidLinkColor: Colors.red,
-                      selectionMenuButtonColor: colors.accent,
-                      selectionMenuButtonTextColor: colors.surfaceBase,
-                      selectionMenuButtonIconColor: colors.surfaceBase,
-                      selectionMenuButtonBorderColor: colors.accent,
-                      selectionMenuTabIndicatorColor: colors.accent,
-                    ),
-                  ),
-                ],
               ),
             );
           },
-          loading: () => const Center(child: _DelayedLoader()),
+          loading: () => const Center(child: CircularProgressIndicator()),
           error: (err, stack) => Center(child: Text('Error: $err')),
         ),
       );
@@ -519,6 +445,7 @@ class _TopBarState extends ConsumerState<_TopBar> {
   String _currentBlockType = ParagraphBlockKeys.type;
   String _currentFontFamily = 'Inter';
   double _currentFontSize = 14.0;
+  bool _isCollapsed = false;
 
   Selection? _lastSelection;
 
@@ -783,6 +710,7 @@ class _TopBarState extends ConsumerState<_TopBar> {
     final editorState = widget.editorState;
     final showSections = ref.watch(sectionsPaneVisibleProvider);
     final showPages = ref.watch(pagesPaneVisibleProvider);
+    final isMobileWidth = MediaQuery.of(context).size.width < 760;
 
     return Container(
       height: AppSpacing.xxl,
@@ -792,122 +720,153 @@ class _TopBarState extends ConsumerState<_TopBar> {
       ),
       child: Row(
         children: [
-          if (!showSections)
-            _iconBtn(Icons.view_sidebar_outlined, 'Show sections', () {
-              ref.read(sectionsPaneVisibleProvider.notifier).toggle();
-            }),
-          if (!showPages)
-            _iconBtn(Icons.menu_outlined, 'Show pages', () {
-              ref.read(pagesPaneVisibleProvider.notifier).toggle();
-            }),
-          if (!showSections || !showPages) ...[
-            const SizedBox(width: AppSpacing.sm),
-            Container(width: 1, height: 20, color: colors.border),
-            const SizedBox(width: AppSpacing.sm),
-          ],
-          
-          // Undo / Redo
-          _iconBtn(Icons.undo_rounded, 'Undo', () {
-            editorState?.undoManager.undo();
-          }),
-          _iconBtn(Icons.redo_rounded, 'Redo', () {
-            editorState?.undoManager.redo();
-          }),
-          const SizedBox(width: AppSpacing.sm),
-          Container(width: 1, height: 20, color: colors.border),
-          const SizedBox(width: AppSpacing.sm),
-          
-          // Block type switcher
-          DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: _currentBlockType,
-              icon: Icon(Icons.arrow_drop_down, color: colors.inkMuted, size: 16),
-              style: TextStyle(color: colors.inkPrimary, fontSize: 13, fontFamily: 'Inter'),
-              items: [
-                DropdownMenuItem(value: ParagraphBlockKeys.type, child: const Text('Normal text')),
-                const DropdownMenuItem(value: 'heading1', child: Text('Heading 1')),
-                const DropdownMenuItem(value: 'heading2', child: Text('Heading 2')),
-                const DropdownMenuItem(value: 'heading3', child: Text('Subheading')),
-                DropdownMenuItem(value: BulletedListBlockKeys.type, child: const Text('Bulleted list')),
-                DropdownMenuItem(value: NumberedListBlockKeys.type, child: const Text('Numbered list')),
-                DropdownMenuItem(value: TodoListBlockKeys.type, child: const Text('Checklist')),
-                DropdownMenuItem(value: QuoteBlockKeys.type, child: const Text('Quote')),
-                const DropdownMenuItem(value: 'code', child: Text('Code block')),
-              ],
-              onChanged: (val) {
-                if (editorState != null && val != null) {
-                  setState(() => _currentBlockType = val);
-                  _applyBlockType(val);
-                }
-              },
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  if (isMobileWidth)
+                    _iconBtn(Icons.arrow_back_rounded, 'Back', () {
+                      ref.read(mobileNavIndexProvider.notifier).back();
+                    }),
+                  if (isMobileWidth)
+                    const SizedBox(width: AppSpacing.sm),
+                    
+                  if (!isMobileWidth && !showSections)
+                    _iconBtn(Icons.view_sidebar_outlined, 'Show sections', () {
+                      ref.read(sectionsPaneVisibleProvider.notifier).toggle();
+                    }),
+                  if (!isMobileWidth && !showPages)
+                    _iconBtn(Icons.menu_outlined, 'Show pages', () {
+                      ref.read(pagesPaneVisibleProvider.notifier).toggle();
+                    }),
+                  if (!isMobileWidth && (!showSections || !showPages)) ...[
+                    const SizedBox(width: AppSpacing.sm),
+                    Container(width: 1, height: 20, color: colors.border),
+                    const SizedBox(width: AppSpacing.sm),
+                  ],
+
+                  // Collapse button
+                  _iconBtn(
+                    _isCollapsed ? Icons.chevron_right_rounded : Icons.chevron_left_rounded, 
+                    _isCollapsed ? 'Expand formatting options' : 'Collapse formatting options', 
+                    () {
+                      setState(() {
+                        _isCollapsed = !_isCollapsed;
+                      });
+                    }
+                  ),
+
+                  if (!_isCollapsed) ...[
+                    const SizedBox(width: AppSpacing.sm),
+                    Container(width: 1, height: 20, color: colors.border),
+                    const SizedBox(width: AppSpacing.sm),
+                    
+                    // Undo / Redo
+                    _iconBtn(Icons.undo_rounded, 'Undo', () {
+                      editorState?.undoManager.undo();
+                    }),
+                    _iconBtn(Icons.redo_rounded, 'Redo', () {
+                      editorState?.undoManager.redo();
+                    }),
+                    const SizedBox(width: AppSpacing.sm),
+                    Container(width: 1, height: 20, color: colors.border),
+                    const SizedBox(width: AppSpacing.sm),
+                    
+                    // Block type switcher
+                    DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _currentBlockType,
+                        icon: Icon(Icons.arrow_drop_down, color: colors.inkMuted, size: 16),
+                        style: TextStyle(color: colors.inkPrimary, fontSize: 13, fontFamily: 'Inter'),
+                        items: [
+                          DropdownMenuItem(value: ParagraphBlockKeys.type, child: const Text('Normal text')),
+                          const DropdownMenuItem(value: 'heading1', child: Text('Heading 1')),
+                          const DropdownMenuItem(value: 'heading2', child: Text('Heading 2')),
+                          const DropdownMenuItem(value: 'heading3', child: Text('Subheading')),
+                          DropdownMenuItem(value: BulletedListBlockKeys.type, child: const Text('Bulleted list')),
+                          DropdownMenuItem(value: NumberedListBlockKeys.type, child: const Text('Numbered list')),
+                          DropdownMenuItem(value: TodoListBlockKeys.type, child: const Text('Checklist')),
+                          DropdownMenuItem(value: QuoteBlockKeys.type, child: const Text('Quote')),
+                          const DropdownMenuItem(value: 'code', child: Text('Code block')),
+                        ],
+                        onChanged: (val) {
+                          if (editorState != null && val != null) {
+                            setState(() => _currentBlockType = val);
+                            _applyBlockType(val);
+                          }
+                        },
+                      ),
+                    ),
+                    
+                    const SizedBox(width: AppSpacing.sm),
+                    Container(width: 1, height: 20, color: colors.border),
+                    const SizedBox(width: AppSpacing.sm),
+                    
+                    // Font family selector
+                    DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _currentFontFamily,
+                        icon: Icon(Icons.arrow_drop_down, color: colors.inkMuted, size: 16),
+                        style: TextStyle(color: colors.inkPrimary, fontSize: 13, fontFamily: 'Inter'),
+                        items: const [
+                          DropdownMenuItem(value: 'Variable', child: Text('Multiple fonts')),
+                          DropdownMenuItem(value: 'Inter', child: Text('Inter')),
+                          DropdownMenuItem(value: 'Merriweather', child: Text('Merriweather')),
+                          DropdownMenuItem(value: 'JetBrains Mono', child: Text('JetBrains Mono')),
+                          DropdownMenuItem(value: 'Roboto', child: Text('Roboto')),
+                          DropdownMenuItem(value: 'Open Sans', child: Text('Open Sans')),
+                          DropdownMenuItem(value: 'Lato', child: Text('Lato')),
+                          DropdownMenuItem(value: 'Poppins', child: Text('Poppins')),
+                          DropdownMenuItem(value: 'Montserrat', child: Text('Montserrat')),
+                          DropdownMenuItem(value: 'Playfair Display', child: Text('Playfair Display')),
+                          DropdownMenuItem(value: 'Source Code Pro', child: Text('Source Code Pro')),
+                        ],
+                        onChanged: (val) {
+                          if (editorState != null && val != null) {
+                            setState(() => _currentFontFamily = val);
+                            _applyFontFamily(val);
+                          }
+                        },
+                      ),
+                    ),
+                    
+                    const SizedBox(width: AppSpacing.sm),
+                    
+                    // Font size selector
+                    DropdownButtonHideUnderline(
+                      child: DropdownButton<double>(
+                        value: _currentFontSize,
+                        icon: Icon(Icons.arrow_drop_down, color: colors.inkMuted, size: 16),
+                        style: TextStyle(color: colors.inkPrimary, fontSize: 13, fontFamily: 'Inter'),
+                        items: [-1.0, 10.0, 11.0, 12.0, 13.0, 14.0, 16.0, 18.0, 20.0, 24.0, 28.0, 32.0, 36.0, 48.0].map((size) {
+                          if (size == -1.0) {
+                            return const DropdownMenuItem(value: -1.0, child: Text('Multiple'));
+                          }
+                          return DropdownMenuItem(value: size, child: Text('${size.toInt()}'));
+                        }).toList(),
+                        onChanged: (val) {
+                          if (editorState != null && val != null) {
+                            setState(() => _currentFontSize = val);
+                            _applyFontSize(val);
+                          }
+                        },
+                      ),
+                    ),
+                    
+                    const SizedBox(width: AppSpacing.sm),
+                    Container(width: 1, height: 20, color: colors.border),
+                    const SizedBox(width: AppSpacing.sm),
+                    
+                    // Insert table
+                    _iconBtn(Icons.table_chart_outlined, 'Insert Table', _insertTable),
+                  ],
+                ],
+              ),
             ),
           ),
           
-          const SizedBox(width: AppSpacing.sm),
-          Container(width: 1, height: 20, color: colors.border),
-          const SizedBox(width: AppSpacing.sm),
-          
-          // Font family selector
-          DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: _currentFontFamily,
-              icon: Icon(Icons.arrow_drop_down, color: colors.inkMuted, size: 16),
-              style: TextStyle(color: colors.inkPrimary, fontSize: 13, fontFamily: 'Inter'),
-              items: const [
-                DropdownMenuItem(value: 'Variable', child: Text('Multiple fonts')),
-                DropdownMenuItem(value: 'Inter', child: Text('Inter')),
-                DropdownMenuItem(value: 'Merriweather', child: Text('Merriweather')),
-                DropdownMenuItem(value: 'JetBrains Mono', child: Text('JetBrains Mono')),
-                DropdownMenuItem(value: 'Roboto', child: Text('Roboto')),
-                DropdownMenuItem(value: 'Open Sans', child: Text('Open Sans')),
-                DropdownMenuItem(value: 'Lato', child: Text('Lato')),
-                DropdownMenuItem(value: 'Poppins', child: Text('Poppins')),
-                DropdownMenuItem(value: 'Montserrat', child: Text('Montserrat')),
-                DropdownMenuItem(value: 'Playfair Display', child: Text('Playfair Display')),
-                DropdownMenuItem(value: 'Source Code Pro', child: Text('Source Code Pro')),
-              ],
-              onChanged: (val) {
-                if (editorState != null && val != null) {
-                  setState(() => _currentFontFamily = val);
-                  _applyFontFamily(val);
-                }
-              },
-            ),
-          ),
-          
-          const SizedBox(width: AppSpacing.sm),
-          
-          // Font size selector
-          DropdownButtonHideUnderline(
-            child: DropdownButton<double>(
-              value: _currentFontSize,
-              icon: Icon(Icons.arrow_drop_down, color: colors.inkMuted, size: 16),
-              style: TextStyle(color: colors.inkPrimary, fontSize: 13, fontFamily: 'Inter'),
-              items: [-1.0, 10.0, 11.0, 12.0, 13.0, 14.0, 16.0, 18.0, 20.0, 24.0, 28.0, 32.0, 36.0, 48.0].map((size) {
-                if (size == -1.0) {
-                  return const DropdownMenuItem(value: -1.0, child: Text('Multiple'));
-                }
-                return DropdownMenuItem(value: size, child: Text('${size.toInt()}'));
-              }).toList(),
-              onChanged: (val) {
-                if (editorState != null && val != null) {
-                  setState(() => _currentFontSize = val);
-                  _applyFontSize(val);
-                }
-              },
-            ),
-          ),
-          
-          const SizedBox(width: AppSpacing.sm),
-          Container(width: 1, height: 20, color: colors.border),
-          const SizedBox(width: AppSpacing.sm),
-          
-          // Insert table
-          _iconBtn(Icons.table_chart_outlined, 'Insert Table', _insertTable),
-          
-          const Spacer(),
-          
-          // Export
+          // Right side fixed items
           if (editorState != null) _exportBtn(),
 
           // Global Search

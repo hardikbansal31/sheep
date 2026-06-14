@@ -20,7 +20,7 @@ class MobileShell extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: colors.surfaceBase,
-      appBar: AppBar(
+      appBar: index == 2 ? null : AppBar(
         backgroundColor: colors.surfacePanel,
         leading: index > 0
             ? IconButton(
@@ -64,31 +64,27 @@ class MobileShell extends ConsumerWidget {
             ),
         ],
       ),
-      body: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 200),
-        child: _buildView(index, ref),
+      body: IndexedStack(
+        index: index,
+        children: [
+          _MobileSections(
+            key: const ValueKey(0),
+            onTap: () => ref.read(mobileNavIndexProvider.notifier).go(1),
+          ),
+          _MobilePages(
+            key: const ValueKey(1),
+            onTap: () => ref.read(mobileNavIndexProvider.notifier).go(2),
+          ),
+          RepaintBoundary(
+            key: const ValueKey(2),
+            child: EditorPane(key: editorPaneKey),
+          ),
+        ],
       ),
     );
   }
 
   static const _titles = ['sections', 'pages', 'editor'];
-
-  Widget _buildView(int index, WidgetRef ref) {
-    return switch (index) {
-      0 => _MobileSections(
-          key: const ValueKey(0),
-          onTap: () => ref.read(mobileNavIndexProvider.notifier).go(1),
-        ),
-      1 => _MobilePages(
-          key: const ValueKey(1),
-          onTap: () => ref.read(mobileNavIndexProvider.notifier).go(2),
-        ),
-      _ => const RepaintBoundary(
-          key: ValueKey(2),
-          child: EditorPane(),
-        ),
-    };
-  }
 }
 
 /// Full-width sections list for mobile.
