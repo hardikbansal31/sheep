@@ -41,6 +41,10 @@ dependencies:
   # --- Sync (Supabase + PowerSync) ---
   supabase_flutter: ^2.5.4
   powersync: ^2.2.0
+  super_clipboard: ^0.9.1
+  provider: ^6.1.5+1
+  markdown: ^7.3.1
+  path: ^1.9.1
 
 dev_dependencies:
   flutter_test:

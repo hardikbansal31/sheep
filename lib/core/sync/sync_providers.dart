@@ -51,16 +51,35 @@ enum SyncStatus {
   error,
 }
 
-/// Watches the PowerSync status stream and maps it to a simple [SyncStatus].
-final syncStatusProvider = StreamProvider<SyncStatus>((ref) {
-  final db = ref.watch(powerSyncProvider);
+class ImageUploadCountNotifier extends Notifier<int> {
+  @override
+  int build() => 0;
 
-  return db.statusStream.map((status) {
-    if (status.anyError != null) return SyncStatus.error;
-    if (!status.connected) return SyncStatus.offline;
-    if (status.downloading || status.uploading) return SyncStatus.syncing;
-    return SyncStatus.synced;
-  });
+  void increment() => state++;
+  void decrement() => state--;
+}
+
+/// Tracks the number of active background image uploads.
+final imageUploadCountProvider = NotifierProvider<ImageUploadCountNotifier, int>(ImageUploadCountNotifier.new);
+
+/// Watches the PowerSync status stream.
+final _powerSyncStatusProvider = StreamProvider((ref) {
+  return ref.watch(powerSyncProvider).statusStream;
+});
+
+/// Computes the overall [SyncStatus] based on PowerSync and image uploads.
+final syncStatusProvider = Provider<SyncStatus>((ref) {
+  final dbStatus = ref.watch(_powerSyncStatusProvider).value;
+  final imageUploadCount = ref.watch(imageUploadCountProvider);
+
+  if (dbStatus == null) return SyncStatus.offline;
+  if (dbStatus.anyError != null) return SyncStatus.error;
+  if (!dbStatus.connected) return SyncStatus.offline;
+  
+  if (dbStatus.downloading || dbStatus.uploading || imageUploadCount > 0) {
+    return SyncStatus.syncing;
+  }
+  return SyncStatus.synced;
 });
 
 // ── Auth State ──────────────────────────────────────────────

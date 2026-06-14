@@ -16,9 +16,7 @@ class SyncStatusDot extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = AppTheme.colorsOf(context);
-    final syncAsync = ref.watch(syncStatusProvider);
-
-    final status = syncAsync.value ?? SyncStatus.offline;
+    final status = ref.watch(syncStatusProvider);
 
     Color dotColor = colors.inkMuted;
     String tooltipText = 'Offline';

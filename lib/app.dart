@@ -74,7 +74,7 @@ class AuthWrapper extends ConsumerWidget {
         backgroundColor: AppTheme.colorsOf(context).surfaceBase,
         body: const Center(child: CircularProgressIndicator()),
       ),
-      error: (_, __) => const AuthScreen(),
+      error: (err, stack) => const AuthScreen(),
     );
   }
 }

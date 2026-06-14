@@ -52,7 +52,7 @@ class ThemedMobileToolbar extends StatelessWidget {
   Widget build(BuildContext context) {
     return ValueListenableBuilder<Selection?>(
       valueListenable: editorState.selectionNotifier,
-      builder: (_, Selection? selection, __) {
+      builder: (context, Selection? selection, child) {
         if (selection == null) {
           return const SizedBox.shrink();
         }

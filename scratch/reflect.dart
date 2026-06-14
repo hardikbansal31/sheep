@@ -1,7 +1,0 @@
-import 'package:appflowy_editor/appflowy_editor.dart';
-
-void main() {
-  for (var e in standardCommandShortcutEvents) {
-    print('${e.key}: ${e.command}');
-  }
-}

@@ -6,8 +6,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:appflowy_editor/appflowy_editor.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:markdown/markdown.dart' as md;
+import 'package:super_clipboard/super_clipboard.dart';
+import 'dart:typed_data';
 
 import '../../core/sync/sync_repository.dart';
+import '../../core/sync/sync_providers.dart';
 import '../../core/providers.dart';
 import 'custom_mobile_toolbar.dart';
 import '../../core/theme/app_theme.dart';
@@ -235,8 +239,9 @@ class EditorPaneState extends ConsumerState<EditorPane> {
         // Compare previous misspelled words with current misspelled words
         final previousWords = previous
             .map((r) {
-              if (r.start < 0 || r.end > text.length || r.start > r.end)
+              if (r.start < 0 || r.end > text.length || r.start > r.end) {
                 return '';
+              }
               return text.substring(r.start, r.end);
             })
             .where((w) => w.isNotEmpty)
@@ -313,10 +318,44 @@ class EditorPaneState extends ConsumerState<EditorPane> {
   }
 
   void _handleCustomPaste(EditorState editorState) async {
+    // 1. Try to get image from SystemClipboard
+    final clipboard = SystemClipboard.instance;
+    if (clipboard != null) {
+      try {
+        final reader = await clipboard.read();
+        
+        if (reader.canProvide(Formats.png)) {
+          final imageBytes = await _readImageBytes(reader, Formats.png);
+          if (imageBytes != null) {
+            await _processPastedImage(editorState, imageBytes, 'png');
+            return;
+          }
+        } else if (reader.canProvide(Formats.jpeg)) {
+          final imageBytes = await _readImageBytes(reader, Formats.jpeg);
+          if (imageBytes != null) {
+            await _processPastedImage(editorState, imageBytes, 'jpg');
+            return;
+          }
+        } else if (reader.canProvide(Formats.webp)) {
+          final imageBytes = await _readImageBytes(reader, Formats.webp);
+          if (imageBytes != null) {
+            await _processPastedImage(editorState, imageBytes, 'webp');
+            return;
+          }
+        }
+      } catch (e) {
+        debugPrint('Error reading clipboard: $e');
+      }
+    }
+
+    // 2. Fall back to text processing
     final clipboardData = await AppFlowyClipboard.getData();
     final text = clipboardData.text;
     if (text != null && text.isNotEmpty) {
-      final document = markdownToDocument(text);
+      final document = markdownToDocument(
+        text,
+        markdownParsers: const [MarkdownCodeBlockParser()],
+      );
       final children = document.root.children;
 
       if (children.isNotEmpty) {
@@ -355,6 +394,70 @@ class EditorPaneState extends ConsumerState<EditorPane> {
     } else if (clipboardData.html != null) {
       await editorState._pasteHtml(clipboardData.html!);
     }
+  }
+
+  Future<Uint8List?> _readImageBytes(ClipboardReader reader, SimpleFileFormat format) async {
+    final completer = Completer<Uint8List?>();
+    reader.getFile(format, (file) {
+      final stream = file.getStream();
+      final chunks = <int>[];
+      stream.listen(
+        (data) => chunks.addAll(data),
+        onDone: () => completer.complete(Uint8List.fromList(chunks)),
+        onError: (e) => completer.complete(null),
+      );
+    });
+    return completer.future;
+  }
+
+  Future<void> _processPastedImage(EditorState editorState, Uint8List bytes, String extension) async {
+    try {
+      final imageService = ref.read(imageServiceProvider);
+      // Save locally
+      final localPath = await imageService.saveImageLocally(bytes, extension: extension);
+      
+      // Insert image node at cursor
+      final selection = editorState.selection;
+      if (selection == null) return;
+      
+      final transaction = editorState.transaction;
+      final imageNode = Node(
+        type: ImageBlockKeys.type,
+        attributes: {
+          ImageBlockKeys.url: localPath,
+        },
+      );
+      transaction.insertNode(selection.end.path, imageNode);
+      editorState.apply(transaction);
+
+      // Begin background upload
+      ref.read(imageUploadCountProvider.notifier).increment();
+      final remoteUrl = await imageService.uploadImage(localPath);
+      ref.read(imageUploadCountProvider.notifier).decrement();
+
+      // If successful, update the URL in the document
+      if (remoteUrl != null && mounted) {
+        _updateImageNodeUrl(editorState, localPath, remoteUrl);
+      }
+    } catch (e) {
+      debugPrint('Error pasting image: $e');
+      ref.read(imageUploadCountProvider.notifier).decrement();
+    }
+  }
+
+  void _updateImageNodeUrl(EditorState editorState, String oldUrl, String newUrl) {
+    void walk(Node node) {
+      if (node.type == ImageBlockKeys.type && node.attributes[ImageBlockKeys.url] == oldUrl) {
+        final transaction = editorState.transaction;
+        transaction.updateNode(node, {ImageBlockKeys.url: newUrl});
+        editorState.apply(transaction);
+        return;
+      }
+      for (final child in node.children) {
+        walk(child);
+      }
+    }
+    walk(editorState.document.root);
   }
 
   String _extractTitle(Document document) {
@@ -431,8 +534,9 @@ class EditorPaneState extends ConsumerState<EditorPane> {
         key: ValueKey(activePageId),
         child: fullPageAsync.when(
           data: (page) {
-            if (page == null)
+            if (page == null) {
               return const Center(child: Text('Page not found'));
+            }
 
             if (_currentlyLoadedPageId != page.id) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -528,7 +632,7 @@ class EditorPaneState extends ConsumerState<EditorPane> {
                     'code': CustomCodeBlockComponentBuilder(
                       configuration: BlockComponentConfiguration(
                         padding: (node) =>
-                            const EdgeInsets.symmetric(vertical: 16.0),
+                            const EdgeInsets.symmetric(vertical: 8.0),
                       ),
                     ),
                   },
@@ -1457,12 +1561,7 @@ extension _SheepEditorPaste on EditorState {
   }
 
   Future<void> _pasteChunked(List<Node> nodes) async {
-    const int chunkSize = 10;
-    for (int i = 0; i < nodes.length; i += chunkSize) {
-      final end = (i + chunkSize > nodes.length) ? nodes.length : i + chunkSize;
-      await pasteMultiLineNodes(nodes.sublist(i, end));
-      await Future.delayed(const Duration(milliseconds: 1));
-    }
+    await pasteMultiLineNodes(nodes);
   }
 
   Future<void> _pastePlainText(String plainText) async {
@@ -1556,5 +1655,38 @@ extension _SheepEditorPaste on EditorState {
     });
     await apply(transaction);
     return true;
+  }
+}
+
+class MarkdownCodeBlockParser extends CustomMarkdownParser {
+  const MarkdownCodeBlockParser();
+
+  @override
+  List<Node> transform(
+    md.Node element,
+    List<CustomMarkdownParser> parsers, {
+    MarkdownListType listType = MarkdownListType.unknown,
+    int? startNumber,
+  }) {
+    if (element is! md.Element) return [];
+    if (element.tag != 'pre') return [];
+
+    final codeElement = element.children?.firstWhere(
+      (child) => child is md.Element && child.tag == 'code',
+      orElse: () => md.Text(''),
+    );
+
+    if (codeElement != null && codeElement is md.Element) {
+      final textContent = codeElement.textContent;
+      return [
+        Node(
+          type: 'code',
+          attributes: {
+            'delta': (Delta()..insert(textContent)).toJson(),
+          },
+        )
+      ];
+    }
+    return [];
   }
 }

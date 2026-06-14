@@ -1,12 +1,12 @@
-import 'package:flutter/material.dart';
 import 'package:appflowy_editor/appflowy_editor.dart';
+import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_theme.dart';
 
 class CustomCodeBlockComponentBuilder extends BlockComponentBuilder {
   CustomCodeBlockComponentBuilder({
-    super.configuration = const BlockComponentConfiguration(),
+    super.configuration,
   });
 
   @override
@@ -29,7 +29,7 @@ class CustomCodeBlockComponentBuilder extends BlockComponentBuilder {
   }
 
   @override
-  BlockComponentValidate get validate => (node) => node.delta != null;
+  BlockComponentValidate get validate => (node) => true;
 }
 
 class CustomCodeBlockComponentWidget extends BlockComponentStatefulWidget {
@@ -82,12 +82,11 @@ class _CustomCodeBlockComponentWidgetState extends State<CustomCodeBlockComponen
     );
     final colors = AppTheme.colorsOf(context);
 
-    // Provide a beautiful container for the monospace text
     Widget child = Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: colors.surfacePanel, // use panel color for code block
+        color: colors.surfacePanel, 
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: colors.border, width: 1),
       ),
@@ -98,17 +97,16 @@ class _CustomCodeBlockComponentWidgetState extends State<CustomCodeBlockComponen
         node: widget.node,
         editorState: editorState,
         textAlign: alignment?.toTextAlign ?? textAlign,
-        placeholderText: placeholderText,
+        placeholderText: 'Type code...',
         textSpanDecorator: (textSpan) {
-          // Force JetBrains Mono font
-            return textSpan.updateTextStyle(
-              textStyleWithTextSpan(textSpan: textSpan).copyWith(
-                fontFamily: GoogleFonts.jetBrainsMono().fontFamily,
-                fontSize: editorState.editorStyle.textStyleConfiguration.code.fontSize ?? 13,
-                height: 1.5,
-                color: colors.inkPrimary,
-              ),
-            );
+          return textSpan.updateTextStyle(
+            textStyleWithTextSpan(textSpan: textSpan).copyWith(
+              fontFamily: GoogleFonts.jetBrainsMono().fontFamily,
+              fontSize: editorState.editorStyle.textStyleConfiguration.code.fontSize ?? 13,
+              height: 1.5,
+              color: colors.inkPrimary,
+            ),
+          );
         },
         placeholderTextSpanDecorator: (textSpan) =>
             textSpan.updateTextStyle(
@@ -121,13 +119,7 @@ class _CustomCodeBlockComponentWidgetState extends State<CustomCodeBlockComponen
       ),
     );
 
-    child = Container(
-      decoration: decoration,
-      key: blockComponentKey,
-      padding: padding,
-      child: child,
-    );
-
+    // Apply native selection wrappers to our bounded container
     child = BlockSelectionContainer(
       node: node,
       delegate: this,

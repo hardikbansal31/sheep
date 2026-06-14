@@ -4,6 +4,7 @@ import 'database/database.dart';
 import 'database/repository.dart';
 import 'sync/sync_providers.dart';
 import 'sync/sync_repository.dart';
+import 'sync/image_service.dart';
 
 /// The local Drift database — used ONLY for local-only tables:
 /// UserPreferences, CustomDictionary, PagesSearch (FTS5).
@@ -25,4 +26,10 @@ final syncRepoProvider = Provider<SyncRepository>((ref) {
   final powerSync = ref.watch(powerSyncProvider);
   final driftDb = ref.watch(databaseProvider);
   return SyncRepository(powerSync, driftDb);
+});
+
+/// Provides the ImageService for handling local cache and Supabase uploads.
+final imageServiceProvider = Provider<ImageService>((ref) {
+  final supabase = ref.watch(supabaseProvider);
+  return ImageService(supabase);
 });
