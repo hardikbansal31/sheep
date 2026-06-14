@@ -19,6 +19,7 @@ import '../search/search_modal.dart';
 import '../sections/providers.dart';
 import '../settings/providers.dart';
 import '../settings/settings_state.dart';
+import 'custom_code_block.dart';
 import 'providers.dart';
 import 'spell_check_service.dart';
 
@@ -40,6 +41,12 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
   final Map<String, List<TextRange>> _misspelledRanges = {};
   final Map<String, List<({TextRange range, DateTime timestamp})>> _correctedRanges = {};
   final Map<String, Timer> _spellCheckDebouncers = {};
+
+  @override
+  void initState() {
+    super.initState();
+    TableDefaults.colWidth = 320.0;
+  }
 
   @override
   void dispose() {
@@ -262,7 +269,7 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
               return;
             }
           }
-          await editorState.pasteMultiLineNodes(children.toList());
+          await editorState._pasteChunked(children.toList());
         }
       }
     } else if (clipboardData.html != null) {
@@ -343,17 +350,44 @@ class _EditorPaneState extends ConsumerState<EditorPane> {
                   blockComponentBuilders: {
                     ...standardBlockComponentBuilderMap,
                     'title': HeadingBlockComponentBuilder(
+                      configuration: BlockComponentConfiguration(
+                        padding: (node) => const EdgeInsets.only(top: 32.0, bottom: 16.0),
+                      ),
                       textStyleBuilder: (level) => GoogleFonts.getFont(
                         settings.fontTitle,
-                        fontSize: 32,
+                        fontSize: 36,
                         fontWeight: FontWeight.bold,
                         color: colors.accent,
+                        height: 1.2,
                       ),
                     ),
                     HeadingBlockKeys.type: HeadingBlockComponentBuilder(
+                      configuration: BlockComponentConfiguration(
+                        padding: (node) {
+                          final level = node.attributes[HeadingBlockKeys.level] as int? ?? 1;
+                          return EdgeInsets.only(top: 28.0 - (level * 2), bottom: 8.0);
+                        },
+                      ),
                       textStyleBuilder: (level) => GoogleFonts.getFont(
                         settings.fontHeadings,
+                        fontSize: level == 1 ? 28 : level == 2 ? 24 : level == 3 ? 20 : 18,
+                        fontWeight: FontWeight.w700,
                         color: colors.inkPrimary,
+                        height: 1.3,
+                      ),
+                    ),
+                    TableBlockKeys.type: TableBlockComponentBuilder(
+                      configuration: BlockComponentConfiguration(
+                        padding: (node) => const EdgeInsets.symmetric(vertical: 16.0),
+                        indentPadding: (node, dir) => EdgeInsets.zero,
+                      ),
+                      tableStyle: const TableStyle(
+                        colWidth: 320,
+                      ),
+                    ),
+                    'code': CustomCodeBlockComponentBuilder(
+                      configuration: BlockComponentConfiguration(
+                        padding: (node) => const EdgeInsets.symmetric(vertical: 16.0),
                       ),
                     ),
                   },
@@ -1072,9 +1106,18 @@ extension _SheepEditorPaste on EditorState {
     if (nodes.length == 1) {
       await pasteSingleLineNode(nodes.first);
     } else {
-      await pasteMultiLineNodes(nodes.toList());
+      await _pasteChunked(nodes.toList());
     }
     return true;
+  }
+
+  Future<void> _pasteChunked(List<Node> nodes) async {
+    const int chunkSize = 10;
+    for (int i = 0; i < nodes.length; i += chunkSize) {
+      final end = (i + chunkSize > nodes.length) ? nodes.length : i + chunkSize;
+      await pasteMultiLineNodes(nodes.sublist(i, end));
+      await Future.delayed(const Duration(milliseconds: 1));
+    }
   }
 
   Future<void> _pastePlainText(String plainText) async {
@@ -1141,7 +1184,7 @@ extension _SheepEditorPaste on EditorState {
     if (nodes.length == 1) {
       await pasteSingleLineNode(nodes.first);
     } else {
-      await pasteMultiLineNodes(nodes.toList());
+      await _pasteChunked(nodes.toList());
     }
   }
 
