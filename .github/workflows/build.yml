@@ -16,7 +16,7 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: subosito/flutter-action@v2
         with:
@@ -109,7 +109,7 @@ jobs:
 
       - name: Package as .deb
         run: |
-          APP_NAME="your_app_name"        # change this
+          APP_NAME="sheep"        
           APP_VERSION="1.0.0"             # or read from pubspec.yaml
           DEB_DIR="deb_build/${APP_NAME}_${APP_VERSION}"
 
@@ -125,8 +125,8 @@ jobs:
           Package: ${APP_NAME}
           Version: ${APP_VERSION}
           Architecture: amd64
-          Maintainer: Your Name <you@example.com>
-          Description: Your app description
+          Maintainer: Hardik B bansalhardik31@gmail.com
+          Description: cross platform note taking app.
           EOF
 
           dpkg-deb --build ${DEB_DIR}
