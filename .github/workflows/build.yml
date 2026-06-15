@@ -121,10 +121,14 @@ jobs:
           mkdir -p ${DEB_DIR}/usr/lib/${APP_NAME}
           mkdir -p ${DEB_DIR}/usr/bin
           mkdir -p ${DEB_DIR}/usr/share/applications
+          mkdir -p ${DEB_DIR}/usr/share/doc/${APP_NAME}
 
           # Copy Flutter bundle
           cp -r build/linux/x64/release/bundle/* \
             ${DEB_DIR}/usr/lib/${APP_NAME}/
+
+          # Copy license/copyright file for Debian package compliance
+          cp LICENSE ${DEB_DIR}/usr/share/doc/${APP_NAME}/copyright
 
           # Wrapper script so it's launchable from terminal
           cat > ${DEB_DIR}/usr/bin/${APP_NAME} << EOF
