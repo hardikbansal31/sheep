@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show compute;
 import 'package:powersync/powersync.dart';
 import 'package:uuid/uuid.dart';
 
@@ -247,7 +248,8 @@ class SyncRepository {
     );
     final page = await getPage(id);
     if (page != null) {
-      await _syncFts(id, title, extractPlainText(page.contentJson));
+      final bodyText = await compute(extractPlainText, page.contentJson);
+      await _syncFts(id, title, bodyText);
     }
   }
 
@@ -257,7 +259,8 @@ class SyncRepository {
       'UPDATE pages SET title = ?, content_json = ?, updated_at = ? WHERE id = ?',
       [title, contentJson, now, id],
     );
-    await _syncFts(id, title, extractPlainText(contentJson));
+    final bodyText = await compute(extractPlainText, contentJson);
+    await _syncFts(id, title, bodyText);
   }
 
   Future<void> updatePageContent(String id, String contentJson) async {
@@ -288,7 +291,8 @@ class SyncRepository {
     );
     final page = await getPage(id);
     if (page != null) {
-      await _syncFts(id, page.title, extractPlainText(page.contentJson));
+      final bodyText = await compute(extractPlainText, page.contentJson);
+      await _syncFts(id, page.title, bodyText);
     }
   }
 

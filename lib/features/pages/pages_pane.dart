@@ -100,7 +100,9 @@ class _Header extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final uiScale = (ref.watch(settingsProvider).value ?? const SettingsState()).uiScale;
+    final uiScale = ref.watch(
+      settingsProvider.select((s) => (s.value ?? const SettingsState()).uiScale),
+    );
     return Container(
       height: AppSpacing.xxl,
       padding: const EdgeInsets.only(left: AppSpacing.md, right: AppSpacing.xs),
@@ -178,7 +180,9 @@ class _PageItem extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = AppTheme.colorsOf(context);
-    final uiScale = (ref.watch(settingsProvider).value ?? const SettingsState()).uiScale;
+    final uiScale = ref.watch(
+      settingsProvider.select((s) => (s.value ?? const SettingsState()).uiScale),
+    );
     return Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.sm,

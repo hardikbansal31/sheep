@@ -74,7 +74,9 @@ class _Header extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final uiScale = (ref.watch(settingsProvider).value ?? const SettingsState()).uiScale;
+    final uiScale = ref.watch(
+      settingsProvider.select((s) => (s.value ?? const SettingsState()).uiScale),
+    );
 
     return Container(
       height: AppSpacing.xxl,
@@ -241,7 +243,9 @@ class _SectionItemState extends ConsumerState<_SectionItem> {
   @override
   Widget build(BuildContext context) {
     final colors = AppTheme.colorsOf(context);
-    final uiScale = (ref.watch(settingsProvider).value ?? const SettingsState()).uiScale;
+    final uiScale = ref.watch(
+      settingsProvider.select((s) => (s.value ?? const SettingsState()).uiScale),
+    );
     
     // Keep controller in sync with external title changes if not renaming
     if (!_isRenaming && _controller.text != widget.section.title) {

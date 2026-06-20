@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, compute;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:appflowy_editor/appflowy_editor.dart';
@@ -26,7 +26,10 @@ import '../settings/providers.dart';
 import '../settings/settings_state.dart';
 import 'custom_code_block.dart';
 import 'providers.dart';
-import 'spell_check_service.dart';
+
+Map<String, dynamic> _decodePageJson(String source) {
+  return jsonDecode(source) as Map<String, dynamic>;
+}
 
 final GlobalKey<EditorPaneState> editorPaneKey = GlobalKey<EditorPaneState>(
   debugLabel: 'editor_pane_key',
@@ -44,11 +47,15 @@ class EditorPaneState extends ConsumerState<EditorPane> {
   EditorScrollController? _editorScrollController;
   Timer? _debounceTimer;
   String? _currentlyLoadedPageId;
+  StreamSubscription? _transactionSub;
 
-  final Map<String, List<TextRange>> _misspelledRanges = {};
-  final Map<String, List<({TextRange range, DateTime timestamp})>>
-  _correctedRanges = {};
-  final Map<String, Timer> _spellCheckDebouncers = {};
+  // Cached editor configuration — rebuilt only in _initEditorState / settings change
+  Map<String, BlockComponentBuilder>? _cachedBlockBuilders;
+  EditorStyle? _cachedEditorStyle;
+  List<CommandShortcutEvent>? _cachedCommandShortcuts;
+  List<CharacterShortcutEvent>? _cachedCharacterShortcuts;
+  SettingsState? _lastCachedSettings;
+  Brightness? _lastCachedBrightness;
 
   @override
   void initState() {
@@ -74,16 +81,162 @@ class EditorPaneState extends ConsumerState<EditorPane> {
       }
     }
 
+    _transactionSub?.cancel();
     _editorScrollController?.dispose();
     _editorState?.dispose();
-    for (final debouncer in _spellCheckDebouncers.values) {
-      debouncer.cancel();
-    }
     super.dispose();
   }
 
-  void _initEditorState(SyncPage page) {
+  /// Builds and caches all editor configuration objects.
+  /// Only called from _initEditorState and when settings/theme change.
+  void _rebuildEditorCaches(SettingsState settings, Brightness brightness) {
+    final colors = brightness == Brightness.dark
+        ? AppColors.dark
+        : AppColors.light;
+
+    _cachedBlockBuilders = {
+      ...standardBlockComponentBuilderMap,
+      'title': HeadingBlockComponentBuilder(
+        configuration: BlockComponentConfiguration(
+          padding: (node) =>
+              const EdgeInsets.only(top: 32.0, bottom: 16.0),
+        ),
+        textStyleBuilder: (level) => GoogleFonts.getFont(
+          settings.fontTitle,
+          fontSize: settings.defaultFontSize * 2.25,
+          fontWeight: FontWeight.bold,
+          color: colors.accent,
+          height: 1.2,
+        ),
+      ),
+      HeadingBlockKeys.type: HeadingBlockComponentBuilder(
+        configuration: BlockComponentConfiguration(
+          padding: (node) {
+            final level =
+                node.attributes[HeadingBlockKeys.level] as int? ?? 1;
+            return EdgeInsets.only(
+              top: 28.0 - (level * 2),
+              bottom: 8.0,
+            );
+          },
+        ),
+        textStyleBuilder: (level) => GoogleFonts.getFont(
+          settings.fontHeadings,
+          fontSize: settings.defaultFontSize *
+              (level == 1
+                  ? 1.75
+                  : level == 2
+                  ? 1.5
+                  : level == 3
+                  ? 1.25
+                  : 1.125),
+          fontWeight: FontWeight.w700,
+          color: colors.inkPrimary,
+          height: 1.3,
+        ),
+      ),
+      TableBlockKeys.type: TableBlockComponentBuilder(
+        configuration: BlockComponentConfiguration(
+          padding: (node) =>
+              const EdgeInsets.symmetric(vertical: 16.0),
+          indentPadding: (node, dir) => EdgeInsets.zero,
+        ),
+        tableStyle: const TableStyle(colWidth: 320),
+      ),
+      'code': CustomCodeBlockComponentBuilder(
+        configuration: BlockComponentConfiguration(
+          padding: (node) =>
+              const EdgeInsets.symmetric(vertical: 8.0),
+        ),
+      ),
+    };
+
+    _cachedEditorStyle = EditorStyle.desktop(
+      padding: EdgeInsets.zero,
+      cursorColor: colors.accent,
+      selectionColor: colors.accent.withValues(alpha: 0.2),
+      textStyleConfiguration: TextStyleConfiguration(
+        text: GoogleFonts.getFont(
+          settings.fontParagraph,
+          fontSize: settings.defaultFontSize,
+          color: colors.inkPrimary,
+          height: 1.5,
+        ),
+        code: GoogleFonts.getFont(
+          settings.fontCode,
+          fontSize: settings.defaultFontSize * 0.9,
+          color: colors.inkPrimary,
+          backgroundColor: colors.surfacePanel,
+          height: 1.5,
+        ),
+      ),
+    );
+
+    _cachedCommandShortcuts = [
+      _customPasteCommand,
+      ...standardCommandShortcutEvents.where(
+        (e) => e.key != 'paste the content',
+      ),
+    ];
+
+    _cachedCharacterShortcuts = [
+      ...standardCharacterShortcutEvents.where(
+        (e) => e != slashCommand,
+      ),
+      customSlashCommand(
+        standardSelectionMenuItems,
+        style: SelectionMenuStyle(
+          selectionMenuBackgroundColor: colors.surfacePanel,
+          selectionMenuItemTextColor: colors.inkPrimary,
+          selectionMenuItemIconColor: colors.inkPrimary,
+          selectionMenuItemSelectedTextColor: colors.accent,
+          selectionMenuItemSelectedIconColor: colors.accent,
+          selectionMenuItemSelectedColor: Colors.transparent,
+          selectionMenuUnselectedLabelColor: colors.inkMuted,
+          selectionMenuDividerColor: colors.border,
+          selectionMenuLinkBorderColor: colors.border,
+          selectionMenuInvalidLinkColor: Colors.red,
+          selectionMenuButtonColor: colors.accent,
+          selectionMenuButtonTextColor: colors.surfaceBase,
+          selectionMenuButtonIconColor: colors.surfaceBase,
+          selectionMenuButtonBorderColor: colors.accent,
+          selectionMenuTabIndicatorColor: colors.accent,
+        ),
+      ),
+    ];
+
+    _lastCachedSettings = settings;
+    _lastCachedBrightness = brightness;
+  }
+
+  /// Only rebuilds caches if settings or theme actually changed.
+  void _ensureEditorCaches(SettingsState settings, Brightness brightness) {
+    if (_cachedBlockBuilders == null ||
+        _lastCachedSettings != settings ||
+        _lastCachedBrightness != brightness) {
+      _rebuildEditorCaches(settings, brightness);
+    }
+  }
+
+  Future<void> _initEditorState(SyncPage page) async {
+    // 1. Flush final save of old page before cancelling
+    if (_currentlyLoadedPageId != null && _editorState != null) {
+      final title = _extractTitle(_editorState!.document);
+      if (title.isNotEmpty) {
+        final jsonStr = jsonEncode(_editorState!.document.toJson());
+        try {
+          ref
+              .read(syncRepoProvider)
+              .updatePage(_currentlyLoadedPageId!, title, jsonStr);
+        } catch (_) {}
+      }
+    }
+
+    // 2. Now safe to cancel — old content is saved
+    _transactionSub?.cancel();
+    _transactionSub = null;
     _debounceTimer?.cancel();
+
     final oldEditorState = _editorState;
     final oldScrollController = _editorScrollController;
     Timer(const Duration(milliseconds: 350), () {
@@ -91,7 +244,7 @@ class EditorPaneState extends ConsumerState<EditorPane> {
       oldScrollController?.dispose();
     });
 
-    final jsonMap = jsonDecode(page.contentJson) as Map<String, dynamic>;
+    final jsonMap = await compute(_decodePageJson, page.contentJson);
 
     // Ensure the first block is a title block for existing pages
     try {
@@ -133,23 +286,10 @@ class EditorPaneState extends ConsumerState<EditorPane> {
     final newEditorState = EditorState(document: doc);
     final newScrollController = EditorScrollController(
       editorState: newEditorState,
-      shrinkWrap: true,
+      shrinkWrap: false,
     );
 
-    // Initial spellcheck for all nodes
-    _spellCheckAllNodes(newEditorState.document);
-
-    newEditorState.transactionStream.listen((event) {
-      // Spellcheck on changed nodes
-      for (final op in event.$2.operations) {
-        if (op is UpdateTextOperation) {
-          final node = newEditorState.document.nodeAtPath(op.path);
-          if (node != null && node.delta != null) {
-            _debounceSpellCheckForNode(node);
-          }
-        }
-      }
-
+    _transactionSub = newEditorState.transactionStream.listen((event) {
       // Auto-save logic
       _debounceTimer?.cancel();
       _debounceTimer = Timer(const Duration(milliseconds: 500), () async {
@@ -174,13 +314,22 @@ class EditorPaneState extends ConsumerState<EditorPane> {
             await ref
                 .read(syncRepoProvider)
                 .updatePage(page.id, title, jsonStr);
-            ref.invalidate(fullPageProvider(page.id));
+            // Don't invalidate fullPageProvider here — the editor already
+            // holds the live EditorState in memory. Invalidating would trigger
+            // a redundant DB re-fetch and widget rebuild every 500ms while
+            // typing. fullPageProvider is only invalidated on external changes
+            // (e.g. page switch, sync from another device).
           } catch (e) {
             debugPrint('Error saving page: $e');
           }
         }
       });
     });
+
+    // Build caches with current settings before setState
+    if (!mounted) return;
+    final currentSettings = ref.read(settingsProvider).value ?? const SettingsState();
+    _rebuildEditorCaches(currentSettings, Theme.of(context).brightness);
 
     setState(() {
       _editorState = newEditorState;
@@ -209,101 +358,7 @@ class EditorPaneState extends ConsumerState<EditorPane> {
     });
   }
 
-  void _spellCheckAllNodes(Document document) {
-    void walk(Node node) {
-      if (node.delta != null) {
-        _debounceSpellCheckForNode(node);
-      }
-      for (final child in node.children) {
-        walk(child);
-      }
-    }
 
-    walk(document.root);
-  }
-
-  void _debounceSpellCheckForNode(Node node) {
-    final nodeId = node.id;
-    _spellCheckDebouncers[nodeId]?.cancel();
-    _spellCheckDebouncers[nodeId] = Timer(
-      const Duration(milliseconds: 300),
-      () async {
-        final text = node.delta?.toPlainText() ?? '';
-        final ranges = await ref
-            .read(spellCheckServiceProvider)
-            .checkSpelling(text);
-
-        final previous = _misspelledRanges[nodeId] ?? [];
-        final correctedList = <({TextRange range, DateTime timestamp})>[];
-
-        // Compare previous misspelled words with current misspelled words
-        final previousWords = previous
-            .map((r) {
-              if (r.start < 0 || r.end > text.length || r.start > r.end) {
-                return '';
-              }
-              return text.substring(r.start, r.end);
-            })
-            .where((w) => w.isNotEmpty)
-            .toSet();
-
-        final currentMisspelledWords = ranges.map((r) {
-          if (r.start < 0 || r.end > text.length || r.start > r.end) return '';
-          return text.substring(r.start, r.end).toLowerCase();
-        }).toSet();
-
-        for (final prevWord in previousWords) {
-          if (!currentMisspelledWords.contains(prevWord.toLowerCase())) {
-            // Word was corrected, locate it in the current text
-            final escaped = RegExp.escape(prevWord);
-            final matches = RegExp(escaped).allMatches(text);
-            for (final m in matches) {
-              final wordRange = TextRange(start: m.start, end: m.end);
-              final isStillMisspelled = ranges.any(
-                (r) => r.start <= m.start && r.end >= m.end,
-              );
-              if (!isStillMisspelled) {
-                correctedList.add((
-                  range: wordRange,
-                  timestamp: DateTime.now(),
-                ));
-              }
-            }
-          }
-        }
-
-        if (mounted) {
-          setState(() {
-            _misspelledRanges[nodeId] = ranges;
-            if (correctedList.isNotEmpty) {
-              _correctedRanges[nodeId] = [
-                ...(_correctedRanges[nodeId] ?? []).where(
-                  (item) =>
-                      DateTime.now().difference(item.timestamp).inMilliseconds <
-                      1500,
-                ),
-                ...correctedList,
-              ];
-              // Clear corrected highlight after 1.5s
-              Timer(const Duration(milliseconds: 1500), () {
-                if (mounted) {
-                  setState(() {
-                    _correctedRanges[nodeId]?.removeWhere(
-                      (item) =>
-                          DateTime.now()
-                              .difference(item.timestamp)
-                              .inMilliseconds >=
-                          1500,
-                    );
-                  });
-                }
-              });
-            }
-          });
-        }
-      },
-    );
-  }
 
   CommandShortcutEvent get _customPasteCommand {
     return CommandShortcutEvent(
@@ -510,22 +565,17 @@ class EditorPaneState extends ConsumerState<EditorPane> {
   Widget build(BuildContext context) {
     final colors = AppTheme.colorsOf(context);
     final activePageId = ref.watch(activePageProvider);
-    final activeSectionId = ref.watch(activeSectionProvider);
-    final settingsAsync = ref.watch(settingsProvider);
-    final settings = settingsAsync.value ?? const SettingsState();
+    final settings = ref.watch(
+      settingsProvider.select((s) => s.value ?? const SettingsState()),
+    );
     final isMobileWidth = MediaQuery.of(context).size.width < 760;
 
     Widget contentChild;
 
     if (activePageId == null) {
-      final hasPages =
-          activeSectionId != null &&
-          (ref.watch(pagesProvider(activeSectionId)).value?.isNotEmpty ??
-              false);
-
-      contentChild = Center(
-        key: const ValueKey('empty_state'),
-        child: _Placeholder(hasPages: hasPages),
+      contentChild = const Center(
+        key: ValueKey('empty_state'),
+        child: _EditorPlaceholder(),
       );
     } else {
       final fullPageAsync = ref.watch(fullPageProvider(activePageId));
@@ -576,120 +626,23 @@ class EditorPaneState extends ConsumerState<EditorPane> {
                         horizontal: 60.0,
                         vertical: 40.0,
                       ).copyWith(top: 0),
-                child: AppFlowyEditor(
-                  editorState: _editorState!,
-                  editorScrollController: _editorScrollController!,
-                  blockComponentBuilders: {
-                    ...standardBlockComponentBuilderMap,
-                    'title': HeadingBlockComponentBuilder(
-                      configuration: BlockComponentConfiguration(
-                        padding: (node) =>
-                            const EdgeInsets.only(top: 32.0, bottom: 16.0),
-                      ),
-                      textStyleBuilder: (level) => GoogleFonts.getFont(
-                        settings.fontTitle,
-                        fontSize: settings.defaultFontSize * 2.25,
-                        fontWeight: FontWeight.bold,
-                        color: colors.accent,
-                        height: 1.2,
-                      ),
-                    ),
-                    HeadingBlockKeys.type: HeadingBlockComponentBuilder(
-                      configuration: BlockComponentConfiguration(
-                        padding: (node) {
-                          final level =
-                              node.attributes[HeadingBlockKeys.level] as int? ??
-                              1;
-                          return EdgeInsets.only(
-                            top: 28.0 - (level * 2),
-                            bottom: 8.0,
-                          );
-                        },
-                      ),
-                      textStyleBuilder: (level) => GoogleFonts.getFont(
-                        settings.fontHeadings,
-                        fontSize: settings.defaultFontSize *
-                            (level == 1
-                                ? 1.75
-                                : level == 2
-                                ? 1.5
-                                : level == 3
-                                ? 1.25
-                                : 1.125),
-                        fontWeight: FontWeight.w700,
-                        color: colors.inkPrimary,
-                        height: 1.3,
-                      ),
-                    ),
-                    TableBlockKeys.type: TableBlockComponentBuilder(
-                      configuration: BlockComponentConfiguration(
-                        padding: (node) =>
-                            const EdgeInsets.symmetric(vertical: 16.0),
-                        indentPadding: (node, dir) => EdgeInsets.zero,
-                      ),
-                      tableStyle: const TableStyle(colWidth: 320),
-                    ),
-                    'code': CustomCodeBlockComponentBuilder(
-                      configuration: BlockComponentConfiguration(
-                        padding: (node) =>
-                            const EdgeInsets.symmetric(vertical: 8.0),
-                      ),
-                    ),
+                child: Builder(
+                  builder: (context) {
+                    // Rebuild caches if settings or theme changed since last cache
+                    _ensureEditorCaches(settings, Theme.of(context).brightness);
+
+                    return AppFlowyEditor(
+                      editorState: _editorState!,
+                      editorScrollController: _editorScrollController!,
+                      blockComponentBuilders: _cachedBlockBuilders!,
+                      editorStyle: _cachedEditorStyle!,
+                      commandShortcutEvents: _cachedCommandShortcuts!,
+                      characterShortcutEvents: _cachedCharacterShortcuts!,
+                      contextMenuBuilder:
+                          (context, position, editorState, onPressed) =>
+                              const SizedBox.shrink(),
+                    );
                   },
-                  editorStyle: EditorStyle.desktop(
-                    padding: EdgeInsets.zero,
-                    cursorColor: colors.accent,
-                    selectionColor: colors.accent.withValues(alpha: 0.2),
-                    textStyleConfiguration: TextStyleConfiguration(
-                      text: GoogleFonts.getFont(
-                        settings.fontParagraph,
-                        fontSize: settings.defaultFontSize,
-                        color: colors.inkPrimary,
-                        height: 1.5,
-                      ),
-                      code: GoogleFonts.getFont(
-                        settings.fontCode,
-                        fontSize: settings.defaultFontSize * 0.9,
-                        color: colors.inkPrimary,
-                        backgroundColor: colors.surfacePanel,
-                        height: 1.5,
-                      ),
-                    ),
-                  ),
-                  commandShortcutEvents: [
-                    _customPasteCommand,
-                    ...standardCommandShortcutEvents.where(
-                      (e) => e.key != 'paste the content',
-                    ),
-                  ],
-                  characterShortcutEvents: [
-                    ...standardCharacterShortcutEvents.where(
-                      (e) => e != slashCommand,
-                    ),
-                    customSlashCommand(
-                      standardSelectionMenuItems,
-                      style: SelectionMenuStyle(
-                        selectionMenuBackgroundColor: colors.surfacePanel,
-                        selectionMenuItemTextColor: colors.inkPrimary,
-                        selectionMenuItemIconColor: colors.inkPrimary,
-                        selectionMenuItemSelectedTextColor: colors.accent,
-                        selectionMenuItemSelectedIconColor: colors.accent,
-                        selectionMenuItemSelectedColor: Colors.transparent,
-                        selectionMenuUnselectedLabelColor: colors.inkMuted,
-                        selectionMenuDividerColor: colors.border,
-                        selectionMenuLinkBorderColor: colors.border,
-                        selectionMenuInvalidLinkColor: Colors.red,
-                        selectionMenuButtonColor: colors.accent,
-                        selectionMenuButtonTextColor: colors.surfaceBase,
-                        selectionMenuButtonIconColor: colors.surfaceBase,
-                        selectionMenuButtonBorderColor: colors.accent,
-                        selectionMenuTabIndicatorColor: colors.accent,
-                      ),
-                    ),
-                  ],
-                  contextMenuBuilder:
-                      (context, position, editorState, onPressed) =>
-                          const SizedBox.shrink(),
                 ),
               ),
             );
@@ -760,6 +713,24 @@ class _TopBar extends ConsumerStatefulWidget {
 }
 
 class _TopBarState extends ConsumerState<_TopBar> {
+  static const _fontDisplayNames = [
+    'Inter',
+    'Merriweather',
+    'JetBrains Mono',
+    'Roboto',
+    'Open Sans',
+    'Lato',
+    'Poppins',
+    'Montserrat',
+    'Playfair Display',
+    'Source Code Pro',
+  ];
+
+  /// internal fontFamily → display name (built once in initState)
+  final Map<String, String> _fontReverseLookup = {};
+  /// display name → internal fontFamily (built once in initState)
+  final Map<String, String> _fontForwardLookup = {};
+
   String _currentBlockType = ParagraphBlockKeys.type;
   late String _currentFontFamily = widget.settings.fontParagraph;
   late double _currentFontSize = widget.settings.defaultFontSize;
@@ -770,6 +741,18 @@ class _TopBarState extends ConsumerState<_TopBar> {
   @override
   void initState() {
     super.initState();
+    // Build font lookup maps once — avoids calling GoogleFonts.getFont
+    // in a loop on every selection change.
+    for (final displayName in _fontDisplayNames) {
+      try {
+        final internal = GoogleFonts.getFont(displayName).fontFamily ?? displayName;
+        _fontForwardLookup[displayName] = internal;
+        _fontReverseLookup[internal] = displayName;
+      } catch (_) {
+        _fontForwardLookup[displayName] = displayName;
+        _fontReverseLookup[displayName] = displayName;
+      }
+    }
     widget.editorState?.selectionNotifier.addListener(_onSelectionChanged);
   }
 
@@ -805,7 +788,7 @@ class _TopBarState extends ConsumerState<_TopBar> {
           blockType = 'heading$level';
         }
         // Only update if it's a known type in our dropdown
-        final knownTypes = {
+        const knownTypes = {
           ParagraphBlockKeys.type,
           'heading1',
           'heading2',
@@ -830,6 +813,9 @@ class _TopBarState extends ConsumerState<_TopBar> {
     EditorState editorState,
     Selection selection,
   ) {
+    String newFontFamily;
+    double newFontSize;
+
     if (selection.isCollapsed) {
       // 1. Check toggled style first (for newly typed text)
       final toggledStyle = editorState.toggledStyle;
@@ -850,12 +836,10 @@ class _TopBarState extends ConsumerState<_TopBar> {
         }
       }
 
-      setState(() {
-        _currentFontFamily = toggledFont != null
-            ? _reverseResolveGoogleFont(toggledFont)
-            : widget.settings.fontParagraph;
-        _currentFontSize = toggledSize ?? widget.settings.defaultFontSize;
-      });
+      newFontFamily = toggledFont != null
+          ? _reverseResolveGoogleFont(toggledFont)
+          : widget.settings.fontParagraph;
+      newFontSize = toggledSize ?? widget.settings.defaultFontSize;
     } else {
       // Range selection: collect all font families and sizes in the selection
       final nodes = editorState.getNodesInSelection(selection);
@@ -901,22 +885,29 @@ class _TopBarState extends ConsumerState<_TopBar> {
         }
       }
 
-      setState(() {
-        if (fontFamilies.isEmpty) {
-          _currentFontFamily = widget.settings.fontParagraph;
-        } else if (fontFamilies.length == 1) {
-          _currentFontFamily = fontFamilies.first;
-        } else {
-          _currentFontFamily = 'Variable';
-        }
+      if (fontFamilies.isEmpty) {
+        newFontFamily = widget.settings.fontParagraph;
+      } else if (fontFamilies.length == 1) {
+        newFontFamily = fontFamilies.first;
+      } else {
+        newFontFamily = 'Variable';
+      }
 
-        if (fontSizes.isEmpty) {
-          _currentFontSize = widget.settings.defaultFontSize;
-        } else if (fontSizes.length == 1) {
-          _currentFontSize = fontSizes.first;
-        } else {
-          _currentFontSize = -1.0; // special value for Variable
-        }
+      if (fontSizes.isEmpty) {
+        newFontSize = widget.settings.defaultFontSize;
+      } else if (fontSizes.length == 1) {
+        newFontSize = fontSizes.first;
+      } else {
+        newFontSize = -1.0; // special value for Variable
+      }
+    }
+
+    // Only rebuild if something actually changed
+    if (newFontFamily != _currentFontFamily ||
+        newFontSize != _currentFontSize) {
+      setState(() {
+        _currentFontFamily = newFontFamily;
+        _currentFontSize = newFontSize;
       });
     }
   }
@@ -977,36 +968,16 @@ class _TopBarState extends ConsumerState<_TopBar> {
     });
   }
 
-  /// Resolves a Google Fonts display name to its registered fontFamily string,
-  /// triggering font download/registration as a side effect.
+  /// Resolves a Google Fonts display name to its registered fontFamily string.
+  /// Uses the cached forward lookup map built in initState.
   String _resolveGoogleFont(String displayName) {
-    try {
-      final style = GoogleFonts.getFont(displayName);
-      return style.fontFamily ?? displayName;
-    } catch (_) {
-      return displayName;
-    }
+    return _fontForwardLookup[displayName] ?? displayName;
   }
 
+  /// Resolves an internal fontFamily string back to its display name.
+  /// Uses the cached reverse lookup map built in initState.
   String _reverseResolveGoogleFont(String internalName) {
-    const displayNames = [
-      'Inter',
-      'Merriweather',
-      'JetBrains Mono',
-      'Roboto',
-      'Open Sans',
-      'Lato',
-      'Poppins',
-      'Montserrat',
-      'Playfair Display',
-      'Source Code Pro',
-    ];
-    for (final name in displayNames) {
-      if (_resolveGoogleFont(name) == internalName) {
-        return name;
-      }
-    }
-    return 'Inter'; // Fallback so dropdown doesn't crash
+    return _fontReverseLookup[internalName] ?? 'Inter';
   }
 
   void _applyFontFamily(String fontFamily) {
@@ -1442,15 +1413,14 @@ class _TopBarState extends ConsumerState<_TopBar> {
   }
 }
 
-class _Placeholder extends StatefulWidget {
-  const _Placeholder({required this.hasPages});
-  final bool hasPages;
+class _EditorPlaceholder extends ConsumerStatefulWidget {
+  const _EditorPlaceholder();
 
   @override
-  State<_Placeholder> createState() => _PlaceholderState();
+  ConsumerState<_EditorPlaceholder> createState() => _EditorPlaceholderState();
 }
 
-class _PlaceholderState extends State<_Placeholder> {
+class _EditorPlaceholderState extends ConsumerState<_EditorPlaceholder> {
   bool _show = false;
   Timer? _timer;
 
@@ -1477,13 +1447,17 @@ class _PlaceholderState extends State<_Placeholder> {
     if (!_show) return const SizedBox.shrink();
 
     final colors = AppTheme.colorsOf(context);
+    final activeSectionId = ref.watch(activeSectionProvider);
+    final hasPages = activeSectionId != null &&
+        (ref.watch(pagesProvider(activeSectionId)).value?.isNotEmpty ?? false);
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(Icons.edit_note_rounded, color: colors.inkMuted, size: 48),
         const SizedBox(height: AppSpacing.md),
         Text(
-          widget.hasPages
+          hasPages
               ? 'Select a page or create a new one'
               : "Click '+' to get started",
           style: TextStyle(color: colors.inkMuted, fontSize: 14),

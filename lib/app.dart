@@ -38,8 +38,9 @@ class SheepApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final settingsAsync = ref.watch(settingsProvider);
-    final themeMode = settingsAsync.value?.themeMode ?? ThemeMode.system;
+    final themeMode = ref.watch(
+      settingsProvider.select((s) => s.value?.themeMode ?? ThemeMode.system),
+    );
 
     return MaterialApp(
       title: 'Sheep',
@@ -47,6 +48,7 @@ class SheepApp extends ConsumerWidget {
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: themeMode,
+      builder: (context, child) => child ?? const SizedBox.shrink(),
       initialRoute: '/',
       routes: {
         '/': (context) => const AuthWrapper(),
