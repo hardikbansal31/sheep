@@ -198,7 +198,7 @@ class SyncRepository {
         .watch(
           'SELECT id, section_id, title, updated_at FROM pages '
           'WHERE section_id = ? AND is_deleted = 0 '
-          'ORDER BY updated_at DESC',
+          'ORDER BY updated_at DESC, id ASC',
           parameters: [sectionId],
         )
         .map((rows) => rows

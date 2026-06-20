@@ -272,6 +272,11 @@ class _SectionItemState extends ConsumerState<_SectionItem> {
                 details.globalPosition.dy,
               ),
               color: colors.surfacePanel,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: BorderSide(color: colors.border),
+              ),
+              elevation: 4,
               items: [
                 PopupMenuItem(
                   value: 'rename',

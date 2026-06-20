@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/sheep_dropdown.dart';
 import 'providers.dart';
 import 'settings_state.dart';
 
@@ -13,6 +14,24 @@ class SettingsModal extends ConsumerWidget {
     final colors = AppTheme.colorsOf(context);
     final settingsAsync = ref.watch(settingsProvider);
 
+    final isMobileWidth = MediaQuery.of(context).size.width < 760;
+
+    if (isMobileWidth) {
+      return Dialog.fullscreen(
+        backgroundColor: colors.surfaceBase,
+        child: SafeArea(
+          child: Container(
+            padding: const EdgeInsets.all(AppSpacing.xl),
+            child: settingsAsync.when(
+              data: (settings) => _SettingsContent(settings: settings, isMobileWidth: true),
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, st) => Center(child: Text('Error loading settings', style: TextStyle(color: colors.inkPrimary))),
+            ),
+          ),
+        ),
+      );
+    }
+
     return Dialog(
       backgroundColor: colors.surfaceBase,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -21,7 +40,7 @@ class SettingsModal extends ConsumerWidget {
         constraints: const BoxConstraints(maxHeight: 600),
         padding: const EdgeInsets.all(AppSpacing.xl),
         child: settingsAsync.when(
-          data: (settings) => _SettingsContent(settings: settings),
+          data: (settings) => _SettingsContent(settings: settings, isMobileWidth: false),
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, st) => Center(child: Text('Error loading settings', style: TextStyle(color: colors.inkPrimary))),
         ),
@@ -31,9 +50,10 @@ class SettingsModal extends ConsumerWidget {
 }
 
 class _SettingsContent extends ConsumerWidget {
-  const _SettingsContent({required this.settings});
+  const _SettingsContent({required this.settings, required this.isMobileWidth});
 
   final SettingsState settings;
+  final bool isMobileWidth;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -42,15 +62,29 @@ class _SettingsContent extends ConsumerWidget {
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
+      mainAxisSize: isMobileWidth ? MainAxisSize.max : MainAxisSize.min,
       children: [
-        Text(
-          'Settings',
-          style: TextStyle(
-            color: colors.inkPrimary,
-            fontSize: 20 * uiScale,
-            fontWeight: FontWeight.w600,
-          ),
+        Row(
+          children: [
+            if (isMobileWidth) ...[
+              IconButton(
+                icon: Icon(Icons.arrow_back, color: colors.inkPrimary),
+                onPressed: () => Navigator.of(context).pop(),
+                splashRadius: 24,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+              const SizedBox(width: AppSpacing.md),
+            ],
+            Text(
+              'Settings',
+              style: TextStyle(
+                color: colors.inkPrimary,
+                fontSize: 20 * uiScale,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: AppSpacing.xl),
         Expanded(
@@ -63,22 +97,15 @@ class _SettingsContent extends ConsumerWidget {
                   label: 'Theme',
                   colors: colors,
                   uiScale: uiScale,
-                  child: DropdownButton<ThemeMode>(
+                  child: SheepDropdown<ThemeMode>(
                     value: settings.themeMode,
-                    icon: Icon(Icons.arrow_drop_down, color: colors.inkMuted),
-                    dropdownColor: colors.surfacePanel,
-                    style: TextStyle(color: colors.inkPrimary, fontSize: 14),
-                    underline: const SizedBox(),
+                    dropdownWidth: 100,
                     items: const [
-                      DropdownMenuItem(value: ThemeMode.system, child: Text('System')),
-                      DropdownMenuItem(value: ThemeMode.light, child: Text('Light')),
-                      DropdownMenuItem(value: ThemeMode.dark, child: Text('Dark')),
+                      SheepDropdownItem(value: ThemeMode.system, label: 'System'),
+                      SheepDropdownItem(value: ThemeMode.light, label: 'Light'),
+                      SheepDropdownItem(value: ThemeMode.dark, label: 'Dark'),
                     ],
-                    onChanged: (val) {
-                      if (val != null) {
-                        ref.read(settingsProvider.notifier).setThemeMode(val);
-                      }
-                    },
+                    onChanged: (val) => ref.read(settingsProvider.notifier).setThemeMode(val),
                   ),
                 ),
                 const SizedBox(height: AppSpacing.xl),
@@ -115,20 +142,13 @@ class _SettingsContent extends ConsumerWidget {
                   label: 'Default Font Size',
                   colors: colors,
                   uiScale: uiScale,
-                  child: DropdownButton<double>(
+                  child: SheepDropdown<double>(
                     value: settings.defaultFontSize,
-                    icon: Icon(Icons.arrow_drop_down, color: colors.inkMuted),
-                    dropdownColor: colors.surfacePanel,
-                    style: TextStyle(color: colors.inkPrimary, fontSize: 14 * uiScale),
-                    underline: const SizedBox(),
+                    dropdownWidth: 100,
                     items: [10.0, 11.0, 12.0, 13.0, 14.0, 16.0, 18.0, 20.0, 24.0, 28.0, 32.0, 36.0, 48.0]
-                        .map((size) => DropdownMenuItem(value: size, child: Text('${size.toInt()}pt')))
+                        .map((size) => SheepDropdownItem(value: size, label: '${size.toInt()}pt'))
                         .toList(),
-                    onChanged: (val) {
-                      if (val != null) {
-                        ref.read(settingsProvider.notifier).setDefaultFontSize(val);
-                      }
-                    },
+                    onChanged: (val) => ref.read(settingsProvider.notifier).setDefaultFontSize(val),
                   ),
                 ),
               ],
@@ -228,20 +248,13 @@ class _FontDropdownRow extends StatelessWidget {
       label: label,
       colors: colors,
       uiScale: uiScale,
-      child: DropdownButton<String>(
+      child: SheepDropdown<String>(
         value: safeValue,
-        icon: Icon(Icons.arrow_drop_down, color: colors.inkMuted),
-        dropdownColor: colors.surfacePanel,
-        style: TextStyle(color: colors.inkPrimary, fontSize: 14 * uiScale),
-        underline: const SizedBox(),
+        dropdownWidth: 160,
         items: _fontOptions
-            .map((font) => DropdownMenuItem(value: font, child: Text(font)))
+            .map((font) => SheepDropdownItem(value: font, label: font))
             .toList(),
-        onChanged: (val) {
-          if (val != null) {
-            onChanged(val);
-          }
-        },
+        onChanged: onChanged,
       ),
     );
   }

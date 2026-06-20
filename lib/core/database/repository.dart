@@ -110,7 +110,10 @@ class SheepRepository {
         _db.pages.updatedAt,
       ])
       ..where(_db.pages.sectionId.equals(sectionId) & _db.pages.isDeleted.equals(false))
-      ..orderBy([OrderingTerm.desc(_db.pages.updatedAt)]);
+      ..orderBy([
+        OrderingTerm.desc(_db.pages.updatedAt),
+        OrderingTerm.asc(_db.pages.id),
+      ]);
 
     return query.watch().map((rows) => rows
         .map((row) => PageListEntry(
