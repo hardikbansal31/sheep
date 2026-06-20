@@ -10,6 +10,8 @@ import '../sections/providers.dart';
 import '../settings/settings_modal.dart';
 import '../sync/sync_status_dot.dart';
 import 'providers.dart';
+import '../../core/auth/auth_providers.dart';
+import '../auth/desktop_pin_modal.dart';
 
 class MobileShell extends ConsumerStatefulWidget {
   const MobileShell({super.key});
@@ -25,6 +27,7 @@ class _MobileShellState extends ConsumerState<MobileShell> {
   Widget build(BuildContext context) {
     final index = ref.watch(mobileNavIndexProvider);
     final colors = AppTheme.colorsOf(context);
+    final unlockedSession = ref.watch(unlockedSessionProvider);
 
     final isForward = index >= _previousIndex;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -85,6 +88,14 @@ class _MobileShellState extends ConsumerState<MobileShell> {
         centerTitle: false,
         elevation: 0,
         actions: [
+          if (unlockedSession.isNotEmpty)
+            IconButton(
+              icon: Icon(Icons.lock_reset, color: colors.accent),
+              onPressed: () {
+                ref.read(unlockedSessionProvider.notifier).clear();
+              },
+              tooltip: 'Lock active items',
+            ),
           if (index == 0) ...[
             IconButton(
               icon: Icon(Icons.settings_outlined, color: colors.inkSecondary),
@@ -179,13 +190,20 @@ class _MobileSections extends ConsumerWidget {
             itemBuilder: (context, index) {
               final section = sections[index];
               return ListTile(
-                leading: Icon(Icons.folder_outlined, color: colors.inkMuted, size: 20),
+                leading: Icon(section.isLocked ? Icons.lock_outline : Icons.folder_outlined, color: colors.inkMuted, size: 20),
                 title: Text(
                   section.title,
                   style: TextStyle(color: colors.inkPrimary, fontSize: 14),
                 ),
                 trailing: Icon(Icons.chevron_right_rounded, color: colors.inkMuted, size: 20),
-                onTap: () {
+                onTap: () async {
+                  if (section.isLocked) {
+                    final session = ref.read(unlockedSessionProvider);
+                    if (!session.contains(section.id)) {
+                      final unlocked = await promptUnlock(context, ref, section.id);
+                      if (!unlocked) return;
+                    }
+                  }
                   ref.read(activeSectionProvider.notifier).select(section.id);
                   onTap();
                 },
@@ -197,6 +215,32 @@ class _MobileSections extends ConsumerWidget {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          ListTile(
+                            leading: Icon(section.isLocked ? Icons.lock_open : Icons.lock_outline, color: colors.inkPrimary),
+                            title: Text(section.isLocked ? 'Disable Protection' : 'Enable Protection', style: TextStyle(color: colors.inkPrimary)),
+                            onTap: () async {
+                              Navigator.pop(context);
+                              if (!section.isLocked) {
+                                final lockService = ref.read(lockServiceProvider);
+                                if (!lockService.isMobile) {
+                                  final isSetup = await lockService.isDesktopPinSetup();
+                                  if (!isSetup) {
+                                    if (!context.mounted) return;
+                                    final success = await showDialog<bool>(
+                                      context: context,
+                                      barrierDismissible: false,
+                                      builder: (context) => DesktopPinModal(itemId: section.id),
+                                    );
+                                    if (success != true) return;
+                                  }
+                                } else {
+                                   final success = await lockService.authenticateMobile();
+                                   if (!success) return;
+                                }
+                              }
+                              ref.read(syncRepoProvider).updateSectionLock(section.id, !section.isLocked);
+                            },
+                          ),
                           ListTile(
                             leading: Icon(Icons.edit, color: colors.inkPrimary),
                             title: Text('Rename', style: TextStyle(color: colors.inkPrimary)),
@@ -320,16 +364,34 @@ class _MobilePages extends ConsumerWidget {
             itemBuilder: (context, index) {
               final page = pages[index];
               return ListTile(
-                title: Text(
-                  page.title,
-                  style: TextStyle(color: colors.inkPrimary, fontSize: 14),
+                title: Row(
+                  children: [
+                    if (page.isLocked) ...[
+                      Icon(Icons.lock_outline, size: 14, color: colors.inkMuted),
+                      const SizedBox(width: 4),
+                    ],
+                    Expanded(
+                      child: Text(
+                        page.title,
+                        style: TextStyle(color: colors.inkPrimary, fontSize: 14),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
                 subtitle: Text(
                   DateFormat('MMM d, yyyy').format(page.updatedAt),
                   style: TextStyle(color: colors.inkMuted, fontSize: 12),
                 ),
                 trailing: Icon(Icons.chevron_right_rounded, color: colors.inkMuted, size: 20),
-                onTap: () {
+                onTap: () async {
+                  if (page.isLocked) {
+                    final session = ref.read(unlockedSessionProvider);
+                    if (!session.contains(page.id) && !session.contains(page.sectionId)) {
+                      final unlocked = await promptUnlock(context, ref, page.id);
+                      if (!unlocked) return;
+                    }
+                  }
                   ref.read(activePageProvider.notifier).select(page.id);
                   onTap();
                 },
@@ -341,6 +403,32 @@ class _MobilePages extends ConsumerWidget {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          ListTile(
+                            leading: Icon(page.isLocked ? Icons.lock_open : Icons.lock_outline, color: colors.inkPrimary),
+                            title: Text(page.isLocked ? 'Disable Protection' : 'Enable Protection', style: TextStyle(color: colors.inkPrimary)),
+                            onTap: () async {
+                              Navigator.pop(context);
+                              if (!page.isLocked) {
+                                final lockService = ref.read(lockServiceProvider);
+                                if (!lockService.isMobile) {
+                                  final isSetup = await lockService.isDesktopPinSetup();
+                                  if (!isSetup) {
+                                    if (!context.mounted) return;
+                                    final success = await showDialog<bool>(
+                                      context: context,
+                                      barrierDismissible: false,
+                                      builder: (context) => DesktopPinModal(itemId: page.id),
+                                    );
+                                    if (success != true) return;
+                                  }
+                                } else {
+                                   final success = await lockService.authenticateMobile();
+                                   if (!success) return;
+                                }
+                              }
+                              ref.read(syncRepoProvider).updatePageLock(page.id, !page.isLocked);
+                            },
+                          ),
                           ListTile(
                             leading: Icon(Icons.edit, color: colors.inkPrimary),
                             title: Text('Rename', style: TextStyle(color: colors.inkPrimary)),

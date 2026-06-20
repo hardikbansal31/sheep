@@ -10,6 +10,8 @@ import '../sections/providers.dart';
 import '../settings/providers.dart';
 import '../settings/settings_state.dart';
 import 'providers.dart';
+import '../auth/desktop_pin_modal.dart';
+import '../../core/auth/auth_providers.dart';
 
 final _dateFormat = DateFormat('MMM d, yyyy');
 
@@ -209,13 +211,37 @@ class _PageItem extends ConsumerWidget {
               elevation: 4,
               items: [
                 PopupMenuItem(
+                  value: 'lock_toggle',
+                  child: Text(page.isLocked ? 'Disable Protection' : 'Enable Protection', style: TextStyle(color: colors.inkPrimary, fontSize: 14 * uiScale)),
+                ),
+                PopupMenuItem(
                   value: 'delete',
                   child: Text('Delete', style: TextStyle(color: Colors.red, fontSize: 14 * uiScale)),
                 ),
               ],
-            ).then((value) {
+            ).then((value) async {
               if (!context.mounted) return;
-              if (value == 'delete') {
+              if (value == 'lock_toggle') {
+                if (!page.isLocked) {
+                  final lockService = ref.read(lockServiceProvider);
+                  if (!lockService.isMobile) {
+                    final isSetup = await lockService.isDesktopPinSetup();
+                    if (!isSetup) {
+                      if (!context.mounted) return;
+                      final success = await showDialog<bool>(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (context) => DesktopPinModal(itemId: page.id),
+                      );
+                      if (success != true) return;
+                    }
+                  } else {
+                     final success = await lockService.authenticateMobile();
+                     if (!success) return;
+                  }
+                }
+                ref.read(syncRepoProvider).updatePageLock(page.id, !page.isLocked);
+              } else if (value == 'delete') {
                 final repo = ref.read(syncRepoProvider);
                 repo.softDeletePage(page.id);
                 if (isSelected) {
@@ -245,7 +271,16 @@ class _PageItem extends ConsumerWidget {
           child: InkWell(
             borderRadius: BorderRadius.circular(6),
             hoverColor: colors.surfaceHover,
-            onTap: onTap,
+            onTap: () async {
+              if (page.isLocked) {
+                final session = ref.read(unlockedSessionProvider);
+                if (!session.contains(page.id) && !session.contains(page.sectionId)) {
+                  final unlocked = await promptUnlock(context, ref, page.id);
+                  if (!unlocked) return;
+                }
+              }
+              onTap();
+            },
             child: Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.sm,
@@ -254,14 +289,24 @@ class _PageItem extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    page.title,
-                    style: TextStyle(
-                      color: isSelected ? colors.accent : colors.inkPrimary,
-                      fontSize: 13 * uiScale,
-                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                    ),
-                    overflow: TextOverflow.ellipsis,
+                  Row(
+                    children: [
+                      if (page.isLocked) ...[
+                        Icon(Icons.lock_outline, size: 12 * uiScale, color: isSelected ? colors.accent : colors.inkSecondary),
+                        const SizedBox(width: 4),
+                      ],
+                      Expanded(
+                        child: Text(
+                          page.title,
+                          style: TextStyle(
+                            color: isSelected ? colors.accent : colors.inkPrimary,
+                            fontSize: 13 * uiScale,
+                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   Text(

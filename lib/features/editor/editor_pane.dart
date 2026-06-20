@@ -19,6 +19,7 @@ import '../pages/providers.dart';
 import '../sections/providers.dart';
 import '../settings/providers.dart';
 import '../settings/settings_state.dart';
+import '../../core/auth/auth_providers.dart';
 import 'custom_code_block.dart';
 import 'editor_top_bar.dart';
 import 'providers.dart';
@@ -568,6 +569,7 @@ class EditorPaneState extends ConsumerState<EditorPane> {
   Widget build(BuildContext context) {
     final colors = AppTheme.colorsOf(context);
     final activePageId = ref.watch(activePageProvider);
+    final session = ref.watch(unlockedSessionProvider);
     final settings = ref.watch(
       settingsProvider.select((s) => s.value ?? const SettingsState()),
     );
@@ -589,6 +591,22 @@ class EditorPaneState extends ConsumerState<EditorPane> {
           data: (page) {
             if (page == null) {
               return const Center(child: Text('Page not found'));
+            }
+
+            if (page.isLocked && !session.contains(page.id) && !session.contains(page.sectionId)) {
+              return Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.lock_outline, size: 48, color: colors.inkMuted),
+                    const SizedBox(height: 16),
+                    Text(
+                      'This page is protected',
+                      style: TextStyle(color: colors.inkMuted, fontSize: 16),
+                    ),
+                  ],
+                ),
+              );
             }
 
             if (_currentlyLoadedPageId != page.id) {

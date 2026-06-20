@@ -8,6 +8,7 @@ class Sections extends Table {
   DateTimeColumn get createdAt =>
       dateTime().withDefault(currentDateAndTime)();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
+  BoolColumn get isLocked => boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -23,6 +24,7 @@ class Pages extends Table {
   DateTimeColumn get updatedAt =>
       dateTime().withDefault(currentDateAndTime)();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
+  BoolColumn get isLocked => boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column> get primaryKey => {id};

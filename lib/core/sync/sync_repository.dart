@@ -13,11 +13,13 @@ class PageListEntry {
     required this.sectionId,
     required this.title,
     required this.updatedAt,
+    required this.isLocked,
   });
   final String id;
   final String sectionId;
   final String title;
   final DateTime updatedAt;
+  final bool isLocked;
 }
 
 /// Simple model for a section row from PowerSync.
@@ -28,12 +30,14 @@ class SyncSection {
     required this.orderIndex,
     required this.createdAt,
     required this.isDeleted,
+    required this.isLocked,
   });
   final String id;
   final String title;
   final int orderIndex;
   final DateTime createdAt;
   final bool isDeleted;
+  final bool isLocked;
 
   factory SyncSection.fromRow(Map<String, dynamic> row) {
     return SyncSection(
@@ -43,6 +47,7 @@ class SyncSection {
       createdAt: DateTime.tryParse(row['created_at']?.toString() ?? '') ??
           DateTime.now(),
       isDeleted: (row['is_deleted'] ?? 0) == 1,
+      isLocked: (row['is_locked'] ?? 0) == 1,
     );
   }
 }
@@ -56,6 +61,7 @@ class SyncPage {
     required this.contentJson,
     required this.updatedAt,
     required this.isDeleted,
+    required this.isLocked,
   });
   final String id;
   final String sectionId;
@@ -63,6 +69,7 @@ class SyncPage {
   final String contentJson;
   final DateTime updatedAt;
   final bool isDeleted;
+  final bool isLocked;
 
   factory SyncPage.fromRow(Map<String, dynamic> row) {
     return SyncPage(
@@ -73,6 +80,7 @@ class SyncPage {
       updatedAt: DateTime.tryParse(row['updated_at']?.toString() ?? '') ??
           DateTime.now(),
       isDeleted: (row['is_deleted'] ?? 0) == 1,
+      isLocked: (row['is_locked'] ?? 0) == 1,
     );
   }
 }
@@ -143,7 +151,7 @@ class SyncRepository {
     final now = DateTime.now().toIso8601String();
 
     await _db.execute(
-      'INSERT INTO sections (id, title, order_index, created_at, is_deleted) VALUES (?, ?, ?, ?, 0)',
+      'INSERT INTO sections (id, title, order_index, created_at, is_deleted, is_locked) VALUES (?, ?, ?, ?, 0, 0)',
       [sectionId, title, orderIndex, now],
     );
 
@@ -157,6 +165,13 @@ class SyncRepository {
     await _db.execute(
       'UPDATE sections SET title = ? WHERE id = ?',
       [title, id],
+    );
+  }
+
+  Future<void> updateSectionLock(String id, bool isLocked) async {
+    await _db.execute(
+      'UPDATE sections SET is_locked = ? WHERE id = ?',
+      [isLocked ? 1 : 0, id],
     );
   }
 
@@ -196,7 +211,7 @@ class SyncRepository {
   Stream<List<PageListEntry>> watchPages(String sectionId) {
     return _db
         .watch(
-          'SELECT id, section_id, title, updated_at FROM pages '
+          'SELECT id, section_id, title, updated_at, is_locked FROM pages '
           'WHERE section_id = ? AND is_deleted = 0 '
           'ORDER BY updated_at DESC, id ASC',
           parameters: [sectionId],
@@ -209,6 +224,7 @@ class SyncRepository {
                   updatedAt:
                       DateTime.tryParse(row['updated_at']?.toString() ?? '') ??
                           DateTime.now(),
+                  isLocked: (row['is_locked'] ?? 0) == 1,
                 ))
             .toList());
   }
@@ -232,8 +248,8 @@ class SyncRepository {
         ']}}';
 
     await _db.execute(
-      'INSERT INTO pages (id, section_id, title, content_json, updated_at, is_deleted) '
-      'VALUES (?, ?, ?, ?, ?, 0)',
+      'INSERT INTO pages (id, section_id, title, content_json, updated_at, is_deleted, is_locked) '
+      'VALUES (?, ?, ?, ?, ?, 0, 0)',
       [id, sectionId, title, contentJson, now],
     );
 
@@ -268,6 +284,13 @@ class SyncRepository {
     await _db.execute(
       'UPDATE pages SET content_json = ?, updated_at = ? WHERE id = ?',
       [contentJson, now, id],
+    );
+  }
+
+  Future<void> updatePageLock(String id, bool isLocked) async {
+    await _db.execute(
+      'UPDATE pages SET is_locked = ? WHERE id = ?',
+      [isLocked ? 1 : 0, id],
     );
   }
 

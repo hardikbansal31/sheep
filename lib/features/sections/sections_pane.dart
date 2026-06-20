@@ -11,6 +11,8 @@ import '../settings/providers.dart';
 import '../settings/settings_modal.dart';
 import '../settings/settings_state.dart';
 import 'providers.dart';
+import '../auth/desktop_pin_modal.dart';
+import '../../core/auth/auth_providers.dart';
 
 class SectionsPane extends ConsumerWidget {
   const SectionsPane({super.key});
@@ -77,6 +79,7 @@ class _Header extends ConsumerWidget {
     final uiScale = ref.watch(
       settingsProvider.select((s) => (s.value ?? const SettingsState()).uiScale),
     );
+    final unlockedSession = ref.watch(unlockedSessionProvider);
 
     return Container(
       height: AppSpacing.xxl,
@@ -94,6 +97,17 @@ class _Header extends ConsumerWidget {
             ),
           ),
           const Spacer(),
+          if (unlockedSession.isNotEmpty) ...[
+            IconButton(
+              icon: Icon(Icons.lock_reset, color: colors.accent, size: 18),
+              onPressed: () {
+                ref.read(unlockedSessionProvider.notifier).clear();
+              },
+              splashRadius: 16,
+              tooltip: 'Lock active items',
+            ),
+            const SizedBox(width: AppSpacing.xs),
+          ],
           IconButton(
             icon: Icon(Icons.view_sidebar_outlined,
                 color: colors.inkSecondary, size: 18),
@@ -283,17 +297,41 @@ class _SectionItemState extends ConsumerState<_SectionItem> {
                   child: Text('Rename', style: TextStyle(color: colors.inkPrimary, fontSize: 14 * uiScale)),
                 ),
                 PopupMenuItem(
+                  value: 'lock_toggle',
+                  child: Text(widget.section.isLocked ? 'Disable Protection' : 'Enable Protection', style: TextStyle(color: colors.inkPrimary, fontSize: 14 * uiScale)),
+                ),
+                PopupMenuItem(
                   value: 'delete',
                   child: Text('Delete', style: TextStyle(color: Colors.red, fontSize: 14 * uiScale)),
                 ),
               ],
-            ).then((value) {
+            ).then((value) async {
               if (!context.mounted) return;
               if (value == 'rename') {
                 setState(() {
                   _isRenaming = true;
                 });
                 _focusNode.requestFocus();
+              } else if (value == 'lock_toggle') {
+                if (!widget.section.isLocked) {
+                  final lockService = ref.read(lockServiceProvider);
+                  if (!lockService.isMobile) {
+                    final isSetup = await lockService.isDesktopPinSetup();
+                    if (!isSetup) {
+                      if (!context.mounted) return;
+                      final success = await showDialog<bool>(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (context) => DesktopPinModal(itemId: widget.section.id),
+                      );
+                      if (success != true) return;
+                    }
+                  } else {
+                     final success = await lockService.authenticateMobile();
+                     if (!success) return;
+                  }
+                }
+                ref.read(syncRepoProvider).updateSectionLock(widget.section.id, !widget.section.isLocked);
               } else if (value == 'delete') {
                 _showDeleteConfirmationDialog(context);
               }
@@ -302,8 +340,17 @@ class _SectionItemState extends ConsumerState<_SectionItem> {
           child: InkWell(
             borderRadius: BorderRadius.circular(6),
             hoverColor: colors.surfaceHover,
-            onTap: () {
+            onTap: () async {
               if (_isRenaming) return;
+              
+              if (widget.section.isLocked) {
+                final session = ref.read(unlockedSessionProvider);
+                if (!session.contains(widget.section.id)) {
+                  final unlocked = await promptUnlock(context, ref, widget.section.id);
+                  if (!unlocked) return;
+                }
+              }
+
               ref.read(activePageProvider.notifier).select(null);
               widget.onTap();
             },
@@ -315,7 +362,7 @@ class _SectionItemState extends ConsumerState<_SectionItem> {
               child: Row(
                 children: [
                   Icon(
-                    Icons.folder_outlined,
+                    widget.section.isLocked ? Icons.lock_outline : Icons.folder_outlined,
                     color: widget.isSelected ? colors.accent : colors.inkSecondary,
                     size: 16 * uiScale,
                   ),

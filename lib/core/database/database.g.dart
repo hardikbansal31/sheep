@@ -64,6 +64,21 @@ class $SectionsTable extends Sections with TableInfo<$SectionsTable, Section> {
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _isLockedMeta = const VerificationMeta(
+    'isLocked',
+  );
+  @override
+  late final GeneratedColumn<bool> isLocked = GeneratedColumn<bool>(
+    'is_locked',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_locked" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -71,6 +86,7 @@ class $SectionsTable extends Sections with TableInfo<$SectionsTable, Section> {
     orderIndex,
     createdAt,
     isDeleted,
+    isLocked,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -117,6 +133,12 @@ class $SectionsTable extends Sections with TableInfo<$SectionsTable, Section> {
         isDeleted.isAcceptableOrUnknown(data['is_deleted']!, _isDeletedMeta),
       );
     }
+    if (data.containsKey('is_locked')) {
+      context.handle(
+        _isLockedMeta,
+        isLocked.isAcceptableOrUnknown(data['is_locked']!, _isLockedMeta),
+      );
+    }
     return context;
   }
 
@@ -146,6 +168,10 @@ class $SectionsTable extends Sections with TableInfo<$SectionsTable, Section> {
         DriftSqlType.bool,
         data['${effectivePrefix}is_deleted'],
       )!,
+      isLocked: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_locked'],
+      )!,
     );
   }
 
@@ -161,12 +187,14 @@ class Section extends DataClass implements Insertable<Section> {
   final int orderIndex;
   final DateTime createdAt;
   final bool isDeleted;
+  final bool isLocked;
   const Section({
     required this.id,
     required this.title,
     required this.orderIndex,
     required this.createdAt,
     required this.isDeleted,
+    required this.isLocked,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -176,6 +204,7 @@ class Section extends DataClass implements Insertable<Section> {
     map['order_index'] = Variable<int>(orderIndex);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['is_deleted'] = Variable<bool>(isDeleted);
+    map['is_locked'] = Variable<bool>(isLocked);
     return map;
   }
 
@@ -186,6 +215,7 @@ class Section extends DataClass implements Insertable<Section> {
       orderIndex: Value(orderIndex),
       createdAt: Value(createdAt),
       isDeleted: Value(isDeleted),
+      isLocked: Value(isLocked),
     );
   }
 
@@ -200,6 +230,7 @@ class Section extends DataClass implements Insertable<Section> {
       orderIndex: serializer.fromJson<int>(json['orderIndex']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
+      isLocked: serializer.fromJson<bool>(json['isLocked']),
     );
   }
   @override
@@ -211,6 +242,7 @@ class Section extends DataClass implements Insertable<Section> {
       'orderIndex': serializer.toJson<int>(orderIndex),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'isDeleted': serializer.toJson<bool>(isDeleted),
+      'isLocked': serializer.toJson<bool>(isLocked),
     };
   }
 
@@ -220,12 +252,14 @@ class Section extends DataClass implements Insertable<Section> {
     int? orderIndex,
     DateTime? createdAt,
     bool? isDeleted,
+    bool? isLocked,
   }) => Section(
     id: id ?? this.id,
     title: title ?? this.title,
     orderIndex: orderIndex ?? this.orderIndex,
     createdAt: createdAt ?? this.createdAt,
     isDeleted: isDeleted ?? this.isDeleted,
+    isLocked: isLocked ?? this.isLocked,
   );
   Section copyWithCompanion(SectionsCompanion data) {
     return Section(
@@ -236,6 +270,7 @@ class Section extends DataClass implements Insertable<Section> {
           : this.orderIndex,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
+      isLocked: data.isLocked.present ? data.isLocked.value : this.isLocked,
     );
   }
 
@@ -246,13 +281,15 @@ class Section extends DataClass implements Insertable<Section> {
           ..write('title: $title, ')
           ..write('orderIndex: $orderIndex, ')
           ..write('createdAt: $createdAt, ')
-          ..write('isDeleted: $isDeleted')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('isLocked: $isLocked')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, title, orderIndex, createdAt, isDeleted);
+  int get hashCode =>
+      Object.hash(id, title, orderIndex, createdAt, isDeleted, isLocked);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -261,7 +298,8 @@ class Section extends DataClass implements Insertable<Section> {
           other.title == this.title &&
           other.orderIndex == this.orderIndex &&
           other.createdAt == this.createdAt &&
-          other.isDeleted == this.isDeleted);
+          other.isDeleted == this.isDeleted &&
+          other.isLocked == this.isLocked);
 }
 
 class SectionsCompanion extends UpdateCompanion<Section> {
@@ -270,6 +308,7 @@ class SectionsCompanion extends UpdateCompanion<Section> {
   final Value<int> orderIndex;
   final Value<DateTime> createdAt;
   final Value<bool> isDeleted;
+  final Value<bool> isLocked;
   final Value<int> rowid;
   const SectionsCompanion({
     this.id = const Value.absent(),
@@ -277,6 +316,7 @@ class SectionsCompanion extends UpdateCompanion<Section> {
     this.orderIndex = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.isDeleted = const Value.absent(),
+    this.isLocked = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   SectionsCompanion.insert({
@@ -285,6 +325,7 @@ class SectionsCompanion extends UpdateCompanion<Section> {
     required int orderIndex,
     this.createdAt = const Value.absent(),
     this.isDeleted = const Value.absent(),
+    this.isLocked = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        title = Value(title),
@@ -295,6 +336,7 @@ class SectionsCompanion extends UpdateCompanion<Section> {
     Expression<int>? orderIndex,
     Expression<DateTime>? createdAt,
     Expression<bool>? isDeleted,
+    Expression<bool>? isLocked,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -303,6 +345,7 @@ class SectionsCompanion extends UpdateCompanion<Section> {
       if (orderIndex != null) 'order_index': orderIndex,
       if (createdAt != null) 'created_at': createdAt,
       if (isDeleted != null) 'is_deleted': isDeleted,
+      if (isLocked != null) 'is_locked': isLocked,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -313,6 +356,7 @@ class SectionsCompanion extends UpdateCompanion<Section> {
     Value<int>? orderIndex,
     Value<DateTime>? createdAt,
     Value<bool>? isDeleted,
+    Value<bool>? isLocked,
     Value<int>? rowid,
   }) {
     return SectionsCompanion(
@@ -321,6 +365,7 @@ class SectionsCompanion extends UpdateCompanion<Section> {
       orderIndex: orderIndex ?? this.orderIndex,
       createdAt: createdAt ?? this.createdAt,
       isDeleted: isDeleted ?? this.isDeleted,
+      isLocked: isLocked ?? this.isLocked,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -343,6 +388,9 @@ class SectionsCompanion extends UpdateCompanion<Section> {
     if (isDeleted.present) {
       map['is_deleted'] = Variable<bool>(isDeleted.value);
     }
+    if (isLocked.present) {
+      map['is_locked'] = Variable<bool>(isLocked.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -357,6 +405,7 @@ class SectionsCompanion extends UpdateCompanion<Section> {
           ..write('orderIndex: $orderIndex, ')
           ..write('createdAt: $createdAt, ')
           ..write('isDeleted: $isDeleted, ')
+          ..write('isLocked: $isLocked, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -438,6 +487,21 @@ class $PagesTable extends Pages with TableInfo<$PagesTable, Page> {
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _isLockedMeta = const VerificationMeta(
+    'isLocked',
+  );
+  @override
+  late final GeneratedColumn<bool> isLocked = GeneratedColumn<bool>(
+    'is_locked',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_locked" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -446,6 +510,7 @@ class $PagesTable extends Pages with TableInfo<$PagesTable, Page> {
     contentJson,
     updatedAt,
     isDeleted,
+    isLocked,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -503,6 +568,12 @@ class $PagesTable extends Pages with TableInfo<$PagesTable, Page> {
         isDeleted.isAcceptableOrUnknown(data['is_deleted']!, _isDeletedMeta),
       );
     }
+    if (data.containsKey('is_locked')) {
+      context.handle(
+        _isLockedMeta,
+        isLocked.isAcceptableOrUnknown(data['is_locked']!, _isLockedMeta),
+      );
+    }
     return context;
   }
 
@@ -536,6 +607,10 @@ class $PagesTable extends Pages with TableInfo<$PagesTable, Page> {
         DriftSqlType.bool,
         data['${effectivePrefix}is_deleted'],
       )!,
+      isLocked: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_locked'],
+      )!,
     );
   }
 
@@ -552,6 +627,7 @@ class Page extends DataClass implements Insertable<Page> {
   final String contentJson;
   final DateTime updatedAt;
   final bool isDeleted;
+  final bool isLocked;
   const Page({
     required this.id,
     required this.sectionId,
@@ -559,6 +635,7 @@ class Page extends DataClass implements Insertable<Page> {
     required this.contentJson,
     required this.updatedAt,
     required this.isDeleted,
+    required this.isLocked,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -569,6 +646,7 @@ class Page extends DataClass implements Insertable<Page> {
     map['content_json'] = Variable<String>(contentJson);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['is_deleted'] = Variable<bool>(isDeleted);
+    map['is_locked'] = Variable<bool>(isLocked);
     return map;
   }
 
@@ -580,6 +658,7 @@ class Page extends DataClass implements Insertable<Page> {
       contentJson: Value(contentJson),
       updatedAt: Value(updatedAt),
       isDeleted: Value(isDeleted),
+      isLocked: Value(isLocked),
     );
   }
 
@@ -595,6 +674,7 @@ class Page extends DataClass implements Insertable<Page> {
       contentJson: serializer.fromJson<String>(json['contentJson']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
+      isLocked: serializer.fromJson<bool>(json['isLocked']),
     );
   }
   @override
@@ -607,6 +687,7 @@ class Page extends DataClass implements Insertable<Page> {
       'contentJson': serializer.toJson<String>(contentJson),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'isDeleted': serializer.toJson<bool>(isDeleted),
+      'isLocked': serializer.toJson<bool>(isLocked),
     };
   }
 
@@ -617,6 +698,7 @@ class Page extends DataClass implements Insertable<Page> {
     String? contentJson,
     DateTime? updatedAt,
     bool? isDeleted,
+    bool? isLocked,
   }) => Page(
     id: id ?? this.id,
     sectionId: sectionId ?? this.sectionId,
@@ -624,6 +706,7 @@ class Page extends DataClass implements Insertable<Page> {
     contentJson: contentJson ?? this.contentJson,
     updatedAt: updatedAt ?? this.updatedAt,
     isDeleted: isDeleted ?? this.isDeleted,
+    isLocked: isLocked ?? this.isLocked,
   );
   Page copyWithCompanion(PagesCompanion data) {
     return Page(
@@ -635,6 +718,7 @@ class Page extends DataClass implements Insertable<Page> {
           : this.contentJson,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
+      isLocked: data.isLocked.present ? data.isLocked.value : this.isLocked,
     );
   }
 
@@ -646,14 +730,22 @@ class Page extends DataClass implements Insertable<Page> {
           ..write('title: $title, ')
           ..write('contentJson: $contentJson, ')
           ..write('updatedAt: $updatedAt, ')
-          ..write('isDeleted: $isDeleted')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('isLocked: $isLocked')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, sectionId, title, contentJson, updatedAt, isDeleted);
+  int get hashCode => Object.hash(
+    id,
+    sectionId,
+    title,
+    contentJson,
+    updatedAt,
+    isDeleted,
+    isLocked,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -663,7 +755,8 @@ class Page extends DataClass implements Insertable<Page> {
           other.title == this.title &&
           other.contentJson == this.contentJson &&
           other.updatedAt == this.updatedAt &&
-          other.isDeleted == this.isDeleted);
+          other.isDeleted == this.isDeleted &&
+          other.isLocked == this.isLocked);
 }
 
 class PagesCompanion extends UpdateCompanion<Page> {
@@ -673,6 +766,7 @@ class PagesCompanion extends UpdateCompanion<Page> {
   final Value<String> contentJson;
   final Value<DateTime> updatedAt;
   final Value<bool> isDeleted;
+  final Value<bool> isLocked;
   final Value<int> rowid;
   const PagesCompanion({
     this.id = const Value.absent(),
@@ -681,6 +775,7 @@ class PagesCompanion extends UpdateCompanion<Page> {
     this.contentJson = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.isDeleted = const Value.absent(),
+    this.isLocked = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   PagesCompanion.insert({
@@ -690,6 +785,7 @@ class PagesCompanion extends UpdateCompanion<Page> {
     required String contentJson,
     this.updatedAt = const Value.absent(),
     this.isDeleted = const Value.absent(),
+    this.isLocked = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        sectionId = Value(sectionId),
@@ -702,6 +798,7 @@ class PagesCompanion extends UpdateCompanion<Page> {
     Expression<String>? contentJson,
     Expression<DateTime>? updatedAt,
     Expression<bool>? isDeleted,
+    Expression<bool>? isLocked,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -711,6 +808,7 @@ class PagesCompanion extends UpdateCompanion<Page> {
       if (contentJson != null) 'content_json': contentJson,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (isDeleted != null) 'is_deleted': isDeleted,
+      if (isLocked != null) 'is_locked': isLocked,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -722,6 +820,7 @@ class PagesCompanion extends UpdateCompanion<Page> {
     Value<String>? contentJson,
     Value<DateTime>? updatedAt,
     Value<bool>? isDeleted,
+    Value<bool>? isLocked,
     Value<int>? rowid,
   }) {
     return PagesCompanion(
@@ -731,6 +830,7 @@ class PagesCompanion extends UpdateCompanion<Page> {
       contentJson: contentJson ?? this.contentJson,
       updatedAt: updatedAt ?? this.updatedAt,
       isDeleted: isDeleted ?? this.isDeleted,
+      isLocked: isLocked ?? this.isLocked,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -756,6 +856,9 @@ class PagesCompanion extends UpdateCompanion<Page> {
     if (isDeleted.present) {
       map['is_deleted'] = Variable<bool>(isDeleted.value);
     }
+    if (isLocked.present) {
+      map['is_locked'] = Variable<bool>(isLocked.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -771,6 +874,7 @@ class PagesCompanion extends UpdateCompanion<Page> {
           ..write('contentJson: $contentJson, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('isDeleted: $isDeleted, ')
+          ..write('isLocked: $isLocked, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1240,6 +1344,7 @@ typedef $$SectionsTableCreateCompanionBuilder =
       required int orderIndex,
       Value<DateTime> createdAt,
       Value<bool> isDeleted,
+      Value<bool> isLocked,
       Value<int> rowid,
     });
 typedef $$SectionsTableUpdateCompanionBuilder =
@@ -1249,6 +1354,7 @@ typedef $$SectionsTableUpdateCompanionBuilder =
       Value<int> orderIndex,
       Value<DateTime> createdAt,
       Value<bool> isDeleted,
+      Value<bool> isLocked,
       Value<int> rowid,
     });
 
@@ -1307,6 +1413,11 @@ class $$SectionsTableFilterComposer
 
   ColumnFilters<bool> get isDeleted => $composableBuilder(
     column: $table.isDeleted,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isLocked => $composableBuilder(
+    column: $table.isLocked,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -1369,6 +1480,11 @@ class $$SectionsTableOrderingComposer
     column: $table.isDeleted,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get isLocked => $composableBuilder(
+    column: $table.isLocked,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$SectionsTableAnnotationComposer
@@ -1396,6 +1512,9 @@ class $$SectionsTableAnnotationComposer
 
   GeneratedColumn<bool> get isDeleted =>
       $composableBuilder(column: $table.isDeleted, builder: (column) => column);
+
+  GeneratedColumn<bool> get isLocked =>
+      $composableBuilder(column: $table.isLocked, builder: (column) => column);
 
   Expression<T> pagesRefs<T extends Object>(
     Expression<T> Function($$PagesTableAnnotationComposer a) f,
@@ -1456,6 +1575,7 @@ class $$SectionsTableTableManager
                 Value<int> orderIndex = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
+                Value<bool> isLocked = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SectionsCompanion(
                 id: id,
@@ -1463,6 +1583,7 @@ class $$SectionsTableTableManager
                 orderIndex: orderIndex,
                 createdAt: createdAt,
                 isDeleted: isDeleted,
+                isLocked: isLocked,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -1472,6 +1593,7 @@ class $$SectionsTableTableManager
                 required int orderIndex,
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
+                Value<bool> isLocked = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SectionsCompanion.insert(
                 id: id,
@@ -1479,6 +1601,7 @@ class $$SectionsTableTableManager
                 orderIndex: orderIndex,
                 createdAt: createdAt,
                 isDeleted: isDeleted,
+                isLocked: isLocked,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -1537,6 +1660,7 @@ typedef $$PagesTableCreateCompanionBuilder =
       required String contentJson,
       Value<DateTime> updatedAt,
       Value<bool> isDeleted,
+      Value<bool> isLocked,
       Value<int> rowid,
     });
 typedef $$PagesTableUpdateCompanionBuilder =
@@ -1547,6 +1671,7 @@ typedef $$PagesTableUpdateCompanionBuilder =
       Value<String> contentJson,
       Value<DateTime> updatedAt,
       Value<bool> isDeleted,
+      Value<bool> isLocked,
       Value<int> rowid,
     });
 
@@ -1603,6 +1728,11 @@ class $$PagesTableFilterComposer
 
   ColumnFilters<bool> get isDeleted => $composableBuilder(
     column: $table.isDeleted,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isLocked => $composableBuilder(
+    column: $table.isLocked,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -1664,6 +1794,11 @@ class $$PagesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get isLocked => $composableBuilder(
+    column: $table.isLocked,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$SectionsTableOrderingComposer get sectionId {
     final $$SectionsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -1713,6 +1848,9 @@ class $$PagesTableAnnotationComposer
 
   GeneratedColumn<bool> get isDeleted =>
       $composableBuilder(column: $table.isDeleted, builder: (column) => column);
+
+  GeneratedColumn<bool> get isLocked =>
+      $composableBuilder(column: $table.isLocked, builder: (column) => column);
 
   $$SectionsTableAnnotationComposer get sectionId {
     final $$SectionsTableAnnotationComposer composer = $composerBuilder(
@@ -1772,6 +1910,7 @@ class $$PagesTableTableManager
                 Value<String> contentJson = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
+                Value<bool> isLocked = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PagesCompanion(
                 id: id,
@@ -1780,6 +1919,7 @@ class $$PagesTableTableManager
                 contentJson: contentJson,
                 updatedAt: updatedAt,
                 isDeleted: isDeleted,
+                isLocked: isLocked,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -1790,6 +1930,7 @@ class $$PagesTableTableManager
                 required String contentJson,
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
+                Value<bool> isLocked = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PagesCompanion.insert(
                 id: id,
@@ -1798,6 +1939,7 @@ class $$PagesTableTableManager
                 contentJson: contentJson,
                 updatedAt: updatedAt,
                 isDeleted: isDeleted,
+                isLocked: isLocked,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

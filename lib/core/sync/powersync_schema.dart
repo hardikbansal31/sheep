@@ -14,6 +14,7 @@ const syncSchema = Schema([
     Column.integer('order_index'),
     Column.text('created_at'),
     Column.integer('is_deleted'),
+    Column.integer('is_locked'),
   ]),
   Table('pages', [
     Column.text('section_id'),
@@ -21,5 +22,6 @@ const syncSchema = Schema([
     Column.text('content_json'),
     Column.text('updated_at'),
     Column.integer('is_deleted'),
+    Column.integer('is_locked'),
   ]),
 ]);

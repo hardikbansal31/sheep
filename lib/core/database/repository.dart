@@ -227,6 +227,11 @@ class SheepRepository {
         ));
   }
 
+  Future<String?> getLockPinHash() => getPreference('lock_pin_hash');
+  Future<void> setLockPinHash(String hash) => setPreference('lock_pin_hash', hash);
+  Future<String?> getLockPinSalt() => getPreference('lock_pin_salt');
+  Future<void> setLockPinSalt(String salt) => setPreference('lock_pin_salt', salt);
+
   // ── Dictionary ───────────────────────────────────────────
 
   Future<List<String>> getWords() async {

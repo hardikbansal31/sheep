@@ -14,7 +14,7 @@ class SheepDatabase extends _$SheepDatabase {
   SheepDatabase([QueryExecutor? executor]) : super(executor ?? _openDefault());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -34,6 +34,10 @@ class SheepDatabase extends _$SheepDatabase {
       if (from < 2) {
         await m.addColumn(sections, sections.isDeleted);
         await m.addColumn(pages, pages.isDeleted);
+      }
+      if (from < 3) {
+        await m.addColumn(sections, sections.isLocked);
+        await m.addColumn(pages, pages.isLocked);
       }
     },
   );

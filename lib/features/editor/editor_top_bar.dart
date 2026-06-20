@@ -12,6 +12,7 @@ import '../export/pdf_exporter.dart';
 import '../layout/providers.dart';
 import '../search/search_modal.dart';
 import '../settings/settings_state.dart';
+import '../../core/auth/auth_providers.dart';
 
 class EditorTopBar extends ConsumerStatefulWidget {
   const EditorTopBar({
@@ -568,6 +569,14 @@ class EditorTopBarState extends ConsumerState<EditorTopBar> {
           ),
 
           // Right side fixed items
+          if (ref.watch(unlockedSessionProvider).isNotEmpty)
+            _iconBtn(Icons.lock_reset, 'Lock active items', () {
+              ref.read(unlockedSessionProvider.notifier).clear();
+              if (isMobileWidth) {
+                // If on mobile, closing the lock might drop the active page if it's protected
+                // But EditorPane handles the fallback.
+              }
+            }),
           if (editorState != null) _exportBtn(),
 
           // Global Search

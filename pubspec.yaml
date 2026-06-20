@@ -45,6 +45,8 @@ dependencies:
   provider: ^6.1.5+1
   markdown: ^7.3.1
   path: ^1.9.1
+  local_auth: ^3.0.1
+  crypto: ^3.0.7
 
 dev_dependencies:
   flutter_test:

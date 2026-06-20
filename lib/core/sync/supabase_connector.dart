@@ -63,6 +63,14 @@ class SupabaseConnector extends PowerSyncBackendConnector {
         final table = op.table;
         final data = Map<String, dynamic>.from(op.opData ?? {});
 
+        // Convert SQLite integer booleans to actual booleans for Supabase
+        if (data.containsKey('is_deleted')) {
+          data['is_deleted'] = data['is_deleted'] == 1;
+        }
+        if (data.containsKey('is_locked')) {
+          data['is_locked'] = data['is_locked'] == 1;
+        }
+
         switch (op.op) {
           case UpdateType.put:
             // INSERT — include id and user_id.

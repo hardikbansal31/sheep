@@ -21,6 +21,7 @@ import 'features/export/export_service.dart';
 import 'features/export/pdf_exporter.dart';
 import 'features/auth/auth_screen.dart';
 import 'core/sync/sync_providers.dart';
+import 'core/auth/auth_providers.dart';
 
 class SearchIntent extends Intent { const SearchIntent(); }
 class BulletsIntent extends Intent { const BulletsIntent(); }
@@ -32,6 +33,10 @@ class SectionPanelIntent extends Intent { const SectionPanelIntent(); }
 class PagePanelIntent extends Intent { const PagePanelIntent(); }
 class ExportPdfIntent extends Intent { const ExportPdfIntent(); }
 class NewPageIntent extends Intent { const NewPageIntent(); }
+class Heading1Intent extends Intent { const Heading1Intent(); }
+class Heading2Intent extends Intent { const Heading2Intent(); }
+class Heading3Intent extends Intent { const Heading3Intent(); }
+class NormalTextIntent extends Intent { const NormalTextIntent(); }
 
 class SheepApp extends ConsumerWidget {
   const SheepApp({super.key});
@@ -86,6 +91,7 @@ class MainAppWrapper extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(sessionLifecycleProvider);
     return Builder(
       builder: (context) {
           return Shortcuts(
@@ -110,6 +116,14 @@ class MainAppWrapper extends ConsumerWidget {
               const SingleActivator(LogicalKeyboardKey.keyP, meta: true): const ExportPdfIntent(),
               const SingleActivator(LogicalKeyboardKey.keyN, control: true): const NewPageIntent(),
               const SingleActivator(LogicalKeyboardKey.keyN, meta: true): const NewPageIntent(),
+              const SingleActivator(LogicalKeyboardKey.digit1, control: true, alt: true): const Heading1Intent(),
+              const SingleActivator(LogicalKeyboardKey.digit1, meta: true, alt: true): const Heading1Intent(),
+              const SingleActivator(LogicalKeyboardKey.digit2, control: true, alt: true): const Heading2Intent(),
+              const SingleActivator(LogicalKeyboardKey.digit2, meta: true, alt: true): const Heading2Intent(),
+              const SingleActivator(LogicalKeyboardKey.digit3, control: true, alt: true): const Heading3Intent(),
+              const SingleActivator(LogicalKeyboardKey.digit3, meta: true, alt: true): const Heading3Intent(),
+              const SingleActivator(LogicalKeyboardKey.digit0, control: true, alt: true): const NormalTextIntent(),
+              const SingleActivator(LogicalKeyboardKey.digit0, meta: true, alt: true): const NormalTextIntent(),
             },
             child: Actions(
               actions: <Type, Action<Intent>>{
@@ -137,6 +151,30 @@ class MainAppWrapper extends ConsumerWidget {
                 NumberedIntent: CallbackAction<NumberedIntent>(
                   onInvoke: (intent) {
                     editorPaneKey.currentState?.applyBlockType(NumberedListBlockKeys.type);
+                    return null;
+                  },
+                ),
+                Heading1Intent: CallbackAction<Heading1Intent>(
+                  onInvoke: (intent) {
+                    editorPaneKey.currentState?.applyBlockType('heading1');
+                    return null;
+                  },
+                ),
+                Heading2Intent: CallbackAction<Heading2Intent>(
+                  onInvoke: (intent) {
+                    editorPaneKey.currentState?.applyBlockType('heading2');
+                    return null;
+                  },
+                ),
+                Heading3Intent: CallbackAction<Heading3Intent>(
+                  onInvoke: (intent) {
+                    editorPaneKey.currentState?.applyBlockType('heading3');
+                    return null;
+                  },
+                ),
+                NormalTextIntent: CallbackAction<NormalTextIntent>(
+                  onInvoke: (intent) {
+                    editorPaneKey.currentState?.applyBlockType(ParagraphBlockKeys.type);
                     return null;
                   },
                 ),

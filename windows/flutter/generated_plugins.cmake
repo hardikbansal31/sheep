@@ -5,6 +5,7 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   app_links
   irondash_engine_context
+  local_auth_windows
   screen_retriever_windows
   share_plus
   super_native_extensions
