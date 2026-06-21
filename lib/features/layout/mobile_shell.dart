@@ -220,24 +220,8 @@ class _MobileSections extends ConsumerWidget {
                             title: Text(section.isLocked ? 'Disable Protection' : 'Enable Protection', style: TextStyle(color: colors.inkPrimary)),
                             onTap: () async {
                               Navigator.pop(context);
-                              if (!section.isLocked) {
-                                final lockService = ref.read(lockServiceProvider);
-                                if (!lockService.isMobile) {
-                                  final isSetup = await lockService.isDesktopPinSetup();
-                                  if (!isSetup) {
-                                    if (!context.mounted) return;
-                                    final success = await showDialog<bool>(
-                                      context: context,
-                                      barrierDismissible: false,
-                                      builder: (context) => DesktopPinModal(itemId: section.id),
-                                    );
-                                    if (success != true) return;
-                                  }
-                                } else {
-                                   final success = await lockService.authenticateMobile();
-                                   if (!success) return;
-                                }
-                              }
+                              final success = await promptUnlock(context, ref, section.id);
+                              if (!success) return;
                               ref.read(syncRepoProvider).updateSectionLock(section.id, !section.isLocked);
                             },
                           ),
@@ -408,24 +392,8 @@ class _MobilePages extends ConsumerWidget {
                             title: Text(page.isLocked ? 'Disable Protection' : 'Enable Protection', style: TextStyle(color: colors.inkPrimary)),
                             onTap: () async {
                               Navigator.pop(context);
-                              if (!page.isLocked) {
-                                final lockService = ref.read(lockServiceProvider);
-                                if (!lockService.isMobile) {
-                                  final isSetup = await lockService.isDesktopPinSetup();
-                                  if (!isSetup) {
-                                    if (!context.mounted) return;
-                                    final success = await showDialog<bool>(
-                                      context: context,
-                                      barrierDismissible: false,
-                                      builder: (context) => DesktopPinModal(itemId: page.id),
-                                    );
-                                    if (success != true) return;
-                                  }
-                                } else {
-                                   final success = await lockService.authenticateMobile();
-                                   if (!success) return;
-                                }
-                              }
+                              final success = await promptUnlock(context, ref, page.id);
+                              if (!success) return;
                               ref.read(syncRepoProvider).updatePageLock(page.id, !page.isLocked);
                             },
                           ),

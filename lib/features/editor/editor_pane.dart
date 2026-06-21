@@ -149,26 +149,37 @@ class EditorPaneState extends ConsumerState<EditorPane> {
       ),
     };
 
-    _cachedEditorStyle = EditorStyle.desktop(
-      padding: EdgeInsets.zero,
-      cursorColor: colors.accent,
-      selectionColor: colors.accent.withValues(alpha: 0.2),
-      textStyleConfiguration: TextStyleConfiguration(
-        text: GoogleFonts.getFont(
-          settings.fontParagraph,
-          fontSize: settings.defaultFontSize,
-          color: colors.inkPrimary,
-          height: 1.5,
-        ),
-        code: GoogleFonts.getFont(
-          settings.fontCode,
-          fontSize: settings.defaultFontSize * 0.9,
-          color: colors.inkPrimary,
-          backgroundColor: colors.surfacePanel,
-          height: 1.5,
-        ),
+    final isMobile = Platform.isIOS || Platform.isAndroid;
+    final textStyleConfig = TextStyleConfiguration(
+      text: GoogleFonts.getFont(
+        settings.fontParagraph,
+        fontSize: settings.defaultFontSize,
+        color: colors.inkPrimary,
+        height: 1.5,
+      ),
+      code: GoogleFonts.getFont(
+        settings.fontCode,
+        fontSize: settings.defaultFontSize * 0.9,
+        color: colors.inkPrimary,
+        backgroundColor: colors.surfacePanel,
+        height: 1.5,
       ),
     );
+
+    _cachedEditorStyle = isMobile
+        ? EditorStyle.mobile(
+            padding: EdgeInsets.zero,
+            cursorColor: colors.accent,
+            dragHandleColor: colors.accent,
+            selectionColor: colors.accent.withValues(alpha: 0.2),
+            textStyleConfiguration: textStyleConfig,
+          )
+        : EditorStyle.desktop(
+            padding: EdgeInsets.zero,
+            cursorColor: colors.accent,
+            selectionColor: colors.accent.withValues(alpha: 0.2),
+            textStyleConfiguration: textStyleConfig,
+          );
 
     _cachedCommandShortcuts = [
       _customPasteCommand,
@@ -620,51 +631,65 @@ class EditorPaneState extends ConsumerState<EditorPane> {
               return const Center(child: _DelayedLoader());
             }
 
-            return FloatingToolbar(
-              items: [
-                ...markdownFormatItems,
-                ...headingItems,
-                bulletedListItem,
-                numberedListItem,
-                quoteItem,
-                linkItem,
-              ],
-              style: FloatingToolbarStyle(
-                backgroundColor: colors.surfacePanel,
-                toolbarActiveColor: colors.accent,
-                toolbarIconColor: colors.inkPrimary,
-              ),
-              textDirection: TextDirection.ltr,
-              editorState: _editorState!,
-              editorScrollController: _editorScrollController!,
-              child: Padding(
-                padding: isMobileWidth
-                    ? const EdgeInsets.symmetric(
-                        horizontal: 16.0,
-                        vertical: 24.0,
-                      ).copyWith(top: 0)
-                    : const EdgeInsets.symmetric(
-                        horizontal: 60.0,
-                        vertical: 40.0,
-                      ).copyWith(top: 0),
-                child: Builder(
-                  builder: (context) {
-                    // Rebuild caches if settings or theme changed since last cache
-                    _ensureEditorCaches(settings, Theme.of(context).brightness);
+            return Padding(
+              padding: isMobileWidth
+                  ? const EdgeInsets.symmetric(
+                      horizontal: 16.0,
+                      vertical: 24.0,
+                    ).copyWith(top: 0)
+                  : const EdgeInsets.symmetric(
+                      horizontal: 60.0,
+                      vertical: 40.0,
+                    ).copyWith(top: 0),
+              child: Builder(
+                builder: (context) {
+                  // Rebuild caches if settings or theme changed since last cache
+                  _ensureEditorCaches(settings, Theme.of(context).brightness);
 
-                    return AppFlowyEditor(
-                      editorState: _editorState!,
-                      editorScrollController: _editorScrollController!,
-                      blockComponentBuilders: _cachedBlockBuilders!,
-                      editorStyle: _cachedEditorStyle!,
-                      commandShortcutEvents: _cachedCommandShortcuts!,
-                      characterShortcutEvents: _cachedCharacterShortcuts!,
-                      contextMenuBuilder:
-                          (context, position, editorState, onPressed) =>
-                              const SizedBox.shrink(),
-                    );
-                  },
-                ),
+                  return AppFlowyEditor(
+                    editorState: _editorState!,
+                    editorScrollController: _editorScrollController!,
+                    blockComponentBuilders: _cachedBlockBuilders!,
+                    editorStyle: _cachedEditorStyle!,
+                    commandShortcutEvents: _cachedCommandShortcuts!,
+                    characterShortcutEvents: _cachedCharacterShortcuts!,
+                    contextMenuBuilder: (Platform.isIOS || Platform.isAndroid) ? null : (context, position, editorState, onPressed) {
+                      return Positioned(
+                        left: position.dx,
+                        top: position.dy,
+                        child: Material(
+                          color: colors.surfacePanel,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            side: BorderSide(color: colors.border),
+                          ),
+                          elevation: 4,
+                          child: IntrinsicWidth(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: standardContextMenuItems.expand((e) => e).map((item) {
+                                return InkWell(
+                                  onTap: () {
+                                    item.onPressed(editorState);
+                                    onPressed();
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                    child: Text(
+                                      item.name,
+                                      style: TextStyle(color: colors.inkPrimary, fontSize: 14),
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
               ),
             );
           },
@@ -693,17 +718,23 @@ class EditorPaneState extends ConsumerState<EditorPane> {
             ThemedMobileToolbar(
               editorState: _editorState!,
               backgroundColor: colors.surfacePanel,
-              foregroundColor: colors.accent,
-              iconColor: colors.accent,
+              foregroundColor: colors.inkPrimary,
+              iconColor: colors.inkPrimary,
               clearDiagonalLineColor: const Color(0xFFCF6679),
               itemHighlightColor: colors.accent,
               itemOutlineColor: colors.border,
               tabbarSelectedBackgroundColor: colors.surfaceHover,
-              tabbarSelectedForegroundColor: colors.accent,
+              tabbarSelectedForegroundColor: colors.inkPrimary,
               primaryColor: colors.accent,
               onPrimaryColor: colors.surfaceBase,
               outlineColor: colors.border,
               toolbarItems: [
+                MobileToolbarItem.action(
+                  itemIconBuilder: (context, editorState, service) => const Icon(Icons.paste_rounded),
+                  actionHandler: (context, editorState) {
+                    _handleCustomPaste(editorState);
+                  },
+                ),
                 textDecorationMobileToolbarItem,
                 listMobileToolbarItem,
                 todoListMobileToolbarItem,

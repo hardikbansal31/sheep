@@ -313,24 +313,9 @@ class _SectionItemState extends ConsumerState<_SectionItem> {
                 });
                 _focusNode.requestFocus();
               } else if (value == 'lock_toggle') {
-                if (!widget.section.isLocked) {
-                  final lockService = ref.read(lockServiceProvider);
-                  if (!lockService.isMobile) {
-                    final isSetup = await lockService.isDesktopPinSetup();
-                    if (!isSetup) {
-                      if (!context.mounted) return;
-                      final success = await showDialog<bool>(
-                        context: context,
-                        barrierDismissible: false,
-                        builder: (context) => DesktopPinModal(itemId: widget.section.id),
-                      );
-                      if (success != true) return;
-                    }
-                  } else {
-                     final success = await lockService.authenticateMobile();
-                     if (!success) return;
-                  }
-                }
+                final success = await promptUnlock(context, ref, widget.section.id);
+                if (!success) return;
+
                 ref.read(syncRepoProvider).updateSectionLock(widget.section.id, !widget.section.isLocked);
               } else if (value == 'delete') {
                 _showDeleteConfirmationDialog(context);
