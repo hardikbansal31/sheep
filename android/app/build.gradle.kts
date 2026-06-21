@@ -1,3 +1,6 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -16,7 +19,7 @@ android {
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
+        jvmTarget = "17"
     }
 
     defaultConfig {
@@ -41,8 +44,8 @@ android {
             } else {
                 val keystorePropertiesFile = rootProject.file("key.properties")
                 if (keystorePropertiesFile.exists()) {
-                    val properties = java.util.Properties()
-                    properties.load(java.io.FileInputStream(keystorePropertiesFile))
+                    val properties = Properties()
+                    properties.load(FileInputStream(keystorePropertiesFile))
                     val storeFileProp = properties.getProperty("storeFile")
                     storeFile = if (storeFileProp != null) file(storeFileProp) else null
                     storePassword = properties.getProperty("storePassword")
