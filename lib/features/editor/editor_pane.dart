@@ -653,7 +653,7 @@ class EditorPaneState extends ConsumerState<EditorPane> {
                     editorStyle: _cachedEditorStyle!,
                     commandShortcutEvents: _cachedCommandShortcuts!,
                     characterShortcutEvents: _cachedCharacterShortcuts!,
-                    contextMenuBuilder: (Platform.isIOS || Platform.isAndroid) ? null : (context, position, editorState, onPressed) {
+                    contextMenuBuilder: (context, position, editorState, onPressed) {
                       return Positioned(
                         left: position.dx,
                         top: position.dy,

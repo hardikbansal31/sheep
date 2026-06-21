@@ -55,6 +55,8 @@ class _CustomCodeBlockComponentWidgetState extends State<CustomCodeBlockComponen
         BlockComponentBackgroundColorMixin,
         BlockComponentTextDirectionMixin,
         BlockComponentAlignMixin {
+  static final _codeFontFamily = GoogleFonts.jetBrainsMono().fontFamily;
+
   @override
   final forwardKey = GlobalKey(debugLabel: 'custom_code_rich_text');
 
@@ -101,7 +103,7 @@ class _CustomCodeBlockComponentWidgetState extends State<CustomCodeBlockComponen
         textSpanDecorator: (textSpan) {
           return textSpan.updateTextStyle(
             textStyleWithTextSpan(textSpan: textSpan).copyWith(
-              fontFamily: GoogleFonts.jetBrainsMono().fontFamily,
+              fontFamily: _codeFontFamily,
               fontSize: editorState.editorStyle.textStyleConfiguration.code.fontSize ?? 13,
               height: 1.5,
               color: colors.inkPrimary,
