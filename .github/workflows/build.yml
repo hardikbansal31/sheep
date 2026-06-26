@@ -176,9 +176,57 @@ jobs:
         with:
           name: linux-deb
           path: deb_build/*.deb
+
+  # ─────────────────────────────────────────────
+  # 4. macOS DMG
+  # ─────────────────────────────────────────────
+  build-macos:
+    name: Build macOS DMG
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.9'
+          channel: 'stable'
+          cache: true
+
+      - name: Enable macOS desktop
+        run: flutter config --enable-macos-desktop
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build macOS release
+        run: flutter build macos --release
+
+      - name: Install create-dmg
+        run: brew install create-dmg
+
+      - name: Create DMG
+        run: |
+          mkdir -p build/macos/dmg
+          create-dmg \
+            --volname "Sheep" \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 100 \
+            --icon "sheep.app" 175 190 \
+            --hide-extension "sheep.app" \
+            --app-drop-link 425 190 \
+            "build/macos/dmg/sheep-macos.dmg" \
+            "build/macos/Build/Products/Release/sheep.app"
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: build/macos/dmg/sheep-macos.dmg
   release:
     name: Create GitHub Release
-    needs: [build-windows, build-android, build-linux]
+    needs: [build-windows, build-android, build-linux, build-macos]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     permissions:
@@ -196,3 +244,4 @@ jobs:
             windows-build/sheep-windows.zip
             android-apk/app-release.apk
             linux-deb/*.deb
+            macos-dmg/sheep-macos.dmg

@@ -9,6 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:markdown/markdown.dart' as md;
 import 'package:super_clipboard/super_clipboard.dart';
 import 'dart:typed_data';
+import 'dart:ui' show PointerDeviceKind;
 
 import '../../core/sync/sync_repository.dart';
 import '../../core/sync/sync_providers.dart';
@@ -646,7 +647,17 @@ class EditorPaneState extends ConsumerState<EditorPane> {
                   // Rebuild caches if settings or theme changed since last cache
                   _ensureEditorCaches(settings, Theme.of(context).brightness);
 
-                  return AppFlowyEditor(
+                  return ScrollConfiguration(
+                    behavior: ScrollConfiguration.of(context).copyWith(
+                      scrollbars: false,
+                      physics: const BouncingScrollPhysics(),
+                      dragDevices: {
+                        PointerDeviceKind.touch,
+                        PointerDeviceKind.mouse,
+                        PointerDeviceKind.trackpad,
+                      },
+                    ),
+                    child: AppFlowyEditor(
                     editorState: _editorState!,
                     editorScrollController: _editorScrollController!,
                     blockComponentBuilders: _cachedBlockBuilders!,
@@ -688,7 +699,7 @@ class EditorPaneState extends ConsumerState<EditorPane> {
                         ),
                       );
                     },
-                  );
+                  ));
                 },
               ),
             );
