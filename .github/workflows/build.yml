@@ -202,7 +202,7 @@ jobs:
         run: flutter pub get
 
       - name: Build macOS release
-        run: flutter build macos --release --build-name=${GITHUB_REF_NAME#v} --build-number=${GITHUB_RUN_NUMBER}
+        run: flutter build macos -v --release
 
       - name: Install create-dmg
         run: brew install create-dmg
