@@ -13,6 +13,7 @@ import '../settings/settings_state.dart';
 import 'providers.dart';
 import '../auth/desktop_pin_modal.dart';
 import '../../core/auth/auth_providers.dart';
+import '../search/search_modal.dart';
 
 class SectionsPane extends ConsumerWidget {
   const SectionsPane({super.key});
@@ -108,6 +109,18 @@ class _Header extends ConsumerWidget {
             ),
             const SizedBox(width: AppSpacing.xs),
           ],
+          IconButton(
+            icon: Icon(Icons.search, color: colors.inkSecondary, size: 18),
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (context) => const SearchModal(),
+              );
+            },
+            splashRadius: 16,
+            tooltip: 'Search (Ctrl+K)',
+          ),
+          const SizedBox(width: AppSpacing.xs),
           IconButton(
             icon: Icon(Icons.view_sidebar_outlined,
                 color: colors.inkSecondary, size: 18),

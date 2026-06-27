@@ -1,21 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/providers.dart';
+import '../../core/sync/sync_providers.dart';
 import '../../core/update/update_service.dart';
 import 'desktop_shell.dart';
 import 'mobile_shell.dart';
 
 /// Switches between [DesktopShell] and [MobileShell] at 760px breakpoint.
-class LayoutShell extends StatefulWidget {
+class LayoutShell extends ConsumerStatefulWidget {
   const LayoutShell({super.key});
 
   static const double mobileBreakpoint = 760;
 
   @override
-  State<LayoutShell> createState() => _LayoutShellState();
+  ConsumerState<LayoutShell> createState() => _LayoutShellState();
 }
 
-class _LayoutShellState extends State<LayoutShell> {
+class _LayoutShellState extends ConsumerState<LayoutShell> {
   @override
   void initState() {
     super.initState();
@@ -30,6 +33,14 @@ class _LayoutShellState extends State<LayoutShell> {
 
   @override
   Widget build(BuildContext context) {
+    // Listen for sync completion and trigger incremental FTS rebuild.
+    // Only fires when status transitions TO synced (i.e. a sync batch finished).
+    ref.listen<SyncStatus>(syncStatusProvider, (previous, next) {
+      if (next == SyncStatus.synced && previous != SyncStatus.synced) {
+        ref.read(syncRepoProvider).syncFtsIncrementally();
+      }
+    });
+
     return LayoutBuilder(
       builder: (context, constraints) {
         if (constraints.maxWidth < LayoutShell.mobileBreakpoint) {

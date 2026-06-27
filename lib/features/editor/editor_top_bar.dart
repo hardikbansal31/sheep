@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:appflowy_editor/appflowy_editor.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -10,7 +11,6 @@ import '../export/export_service.dart';
 import '../export/markdown_exporter.dart';
 import '../export/pdf_exporter.dart';
 import '../layout/providers.dart';
-import '../search/search_modal.dart';
 import '../settings/settings_state.dart';
 import '../../core/auth/auth_providers.dart';
 
@@ -20,10 +20,12 @@ class EditorTopBar extends ConsumerStatefulWidget {
     required this.colors,
     required this.editorState,
     required this.settings,
+    required this.onToggleFindReplace,
   });
   final AppColors colors;
   final EditorState? editorState;
   final SettingsState settings;
+  final VoidCallback onToggleFindReplace;
 
   @override
   ConsumerState<EditorTopBar> createState() => EditorTopBarState();
@@ -133,6 +135,18 @@ class EditorTopBarState extends ConsumerState<EditorTopBar> {
     String newFontFamily;
     double newFontSize;
 
+    String baseFontFamily = widget.settings.fontParagraph;
+    final startNode = editorState.getNodeAtPath(selection.start.path);
+    if (startNode != null) {
+      if (startNode.type == 'title') {
+        baseFontFamily = widget.settings.fontTitle;
+      } else if (startNode.type == HeadingBlockKeys.type) {
+        baseFontFamily = widget.settings.fontHeadings;
+      } else if (startNode.type == 'code') {
+        baseFontFamily = widget.settings.fontCode;
+      }
+    }
+
     if (selection.isCollapsed) {
       // 1. Check toggled style first (for newly typed text)
       final toggledStyle = editorState.toggledStyle;
@@ -155,7 +169,7 @@ class EditorTopBarState extends ConsumerState<EditorTopBar> {
 
       newFontFamily = toggledFont != null
           ? _reverseResolveGoogleFont(toggledFont)
-          : widget.settings.fontParagraph;
+          : baseFontFamily;
       newFontSize = toggledSize ?? widget.settings.defaultFontSize;
     } else {
       // Range selection: collect all font families and sizes in the selection
@@ -164,6 +178,15 @@ class EditorTopBarState extends ConsumerState<EditorTopBar> {
       final Set<double> fontSizes = {};
 
       for (final node in nodes) {
+        String nodeBaseFont = widget.settings.fontParagraph;
+        if (node.type == 'title') {
+          nodeBaseFont = widget.settings.fontTitle;
+        } else if (node.type == HeadingBlockKeys.type) {
+          nodeBaseFont = widget.settings.fontHeadings;
+        } else if (node.type == 'code') {
+          nodeBaseFont = widget.settings.fontCode;
+        }
+
         final delta = node.delta;
         if (delta == null) continue;
 
@@ -194,7 +217,7 @@ class EditorTopBarState extends ConsumerState<EditorTopBar> {
             fontFamilies.add(
               font != null
                   ? _reverseResolveGoogleFont(font)
-                  : widget.settings.fontParagraph,
+                  : nodeBaseFont,
             );
             fontSizes.add(size ?? widget.settings.defaultFontSize);
           }
@@ -203,7 +226,7 @@ class EditorTopBarState extends ConsumerState<EditorTopBar> {
       }
 
       if (fontFamilies.isEmpty) {
-        newFontFamily = widget.settings.fontParagraph;
+        newFontFamily = baseFontFamily;
       } else if (fontFamilies.length == 1) {
         newFontFamily = fontFamilies.first;
       } else {
@@ -579,12 +602,9 @@ class EditorTopBarState extends ConsumerState<EditorTopBar> {
             }),
           if (editorState != null) _exportBtn(),
 
-          // Global Search
-          _iconBtn(Icons.search, 'Search (Ctrl+K)', () {
-            showDialog(
-              context: context,
-              builder: (context) => const SearchModal(),
-            );
+          // Local Find and Replace
+          _iconBtn(Icons.find_replace_outlined, 'Find and Replace (Ctrl+F)', () {
+            widget.onToggleFindReplace();
           }),
         ],
       ),
@@ -614,80 +634,105 @@ class EditorTopBarState extends ConsumerState<EditorTopBar> {
   }
 
   Widget _exportBtn() {
-    return PopupMenuButton<String>(
-      icon: Icon(Icons.ios_share, color: widget.colors.inkSecondary, size: 18),
-      tooltip: 'Export (PDF: Ctrl+P)',
-      color: widget.colors.surfacePanel,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: BorderSide(color: widget.colors.border),
-      ),
-      onSelected: (value) async {
-        if (widget.editorState == null) return;
-        final contentStr = jsonEncode(widget.editorState!.document.toJson());
+    return Tooltip(
+      message: 'Export (PDF: Ctrl+P)',
+      child: SheepDropdown<String>(
+        value: '',
+        dropdownWidth: 180,
+        alignRight: true,
+        selectedItemBuilder: (context, _) => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+          child: Icon(Icons.ios_share, color: widget.colors.inkSecondary, size: 18),
+        ),
+        items: [
+          SheepDropdownItem(
+            value: 'markdown',
+            label: 'Export Markdown',
+            icon: Icon(Icons.description, size: 16, color: widget.colors.inkPrimary),
+          ),
+          SheepDropdownItem(
+            value: 'pdf',
+            label: 'Export PDF',
+            icon: Icon(Icons.picture_as_pdf, size: 16, color: widget.colors.inkPrimary),
+          ),
+          SheepDropdownItem(
+            value: 'copy',
+            label: 'Copy to Clipboard',
+            icon: Icon(Icons.copy, size: 16, color: widget.colors.inkPrimary),
+          ),
+        ],
+        onChanged: (value) async {
+          if (widget.editorState == null) return;
+          final contentStr = jsonEncode(widget.editorState!.document.toJson());
 
-        final title = _extractTitle(widget.editorState!.document);
-        final safeTitle = title.isEmpty
-            ? 'Untitled'
-            : title.replaceAll(RegExp(r'[^\w\s]+'), '').replaceAll(' ', '_');
+          final title = _extractTitle(widget.editorState!.document);
+          final safeTitle = title.isEmpty
+              ? 'Untitled'
+              : title.replaceAll(RegExp(r'[^\w\s]+'), '').replaceAll(' ', '_');
 
-        if (value == 'markdown') {
-          final confirmed = await showDialog<bool>(
-            context: context,
-            builder: (context) => AlertDialog(
-              backgroundColor: widget.colors.surfacePanel,
-              title: Text(
-                'Export Markdown',
-                style: TextStyle(color: widget.colors.inkPrimary),
-              ),
-              content: Text(
-                'Exporting to Markdown is lossy. Font families and precise font sizes will be dropped.',
-                style: TextStyle(color: widget.colors.inkPrimary),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: Text(
-                    'Cancel',
-                    style: TextStyle(color: widget.colors.inkMuted),
-                  ),
+          if (value == 'markdown') {
+            final confirmed = await showDialog<bool>(
+              context: context,
+              builder: (context) => AlertDialog(
+                backgroundColor: widget.colors.surfacePanel,
+                title: Text(
+                  'Export Markdown',
+                  style: TextStyle(color: widget.colors.inkPrimary),
                 ),
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(true),
-                  child: Text(
-                    'Continue',
-                    style: TextStyle(color: widget.colors.accent),
-                  ),
+                content: Text(
+                  'Exporting to Markdown is lossy. Font families and precise font sizes will be dropped.',
+                  style: TextStyle(color: widget.colors.inkPrimary),
                 ),
-              ],
-            ),
-          );
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    child: Text(
+                      'Cancel',
+                      style: TextStyle(color: widget.colors.inkMuted),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    child: Text(
+                      'Continue',
+                      style: TextStyle(color: widget.colors.accent),
+                    ),
+                  ),
+                ],
+              ),
+            );
 
-          if (confirmed == true) {
-            final md = MarkdownExporter.export(contentStr);
-            await ExportService.exportString(md, '$safeTitle.md');
+            if (confirmed == true) {
+              final md = MarkdownExporter.export(contentStr);
+              await ExportService.exportString(md, '$safeTitle.md');
+            }
+          } else if (value == 'pdf') {
+            final pdfBytes = await PdfExporter.export(contentStr);
+            await ExportService.exportBytes(pdfBytes, '$safeTitle.pdf');
+          } else if (value == 'copy') {
+            final lastSelectable = widget.editorState!.getLastSelectable();
+            if (lastSelectable != null) {
+              final start = Position(path: [0]);
+              final end = lastSelectable.$2.end(lastSelectable.$1);
+              final selection = Selection(start: start, end: end);
+              final text = widget.editorState!.getTextInSelection(selection).join('\n');
+              await Clipboard.setData(ClipboardData(text: text));
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Copied all text to clipboard',
+                      style: TextStyle(color: widget.colors.inkPrimary),
+                    ),
+                    backgroundColor: widget.colors.surfacePanel,
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              }
+            }
           }
-        } else if (value == 'pdf') {
-          final pdfBytes = await PdfExporter.export(contentStr);
-          await ExportService.exportBytes(pdfBytes, '$safeTitle.pdf');
-        }
-      },
-      itemBuilder: (context) => [
-        PopupMenuItem(
-          value: 'markdown',
-          child: Text(
-            'Export as Markdown',
-            style: TextStyle(color: widget.colors.inkPrimary),
-          ),
-        ),
-        PopupMenuItem(
-          value: 'pdf',
-          child: Text(
-            'Export as PDF',
-            style: TextStyle(color: widget.colors.inkPrimary),
-          ),
-        ),
-      ],
+        },
+      ),
     );
   }
 }

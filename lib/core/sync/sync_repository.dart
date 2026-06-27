@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:drift/drift.dart' show Variable;
+
 import 'package:flutter/foundation.dart' show compute;
 import 'package:powersync/powersync.dart';
 import 'package:uuid/uuid.dart';
@@ -336,6 +338,79 @@ class SyncRepository {
     final count = (countResult.first['c'] as num).toInt();
     if (count == 0) {
       await createSection('Section 1');
+    }
+  }
+
+  // ── Incremental FTS Sync ────────────────────────────────
+
+  /// Incrementally syncs the Drift FTS5 index with pages that have changed
+  /// in PowerSync since the last sync. Uses a high-watermark timestamp stored
+  /// in Drift's user_preferences table.
+  Future<void> syncFtsIncrementally() async {
+    if (_driftDb == null) return;
+
+    try {
+      // 1. Read the high-watermark timestamp
+      String lastSync = '1970-01-01T00:00:00.000Z';
+      try {
+        final rows = await _driftDb.customSelect(
+          'SELECT value FROM user_preferences WHERE key = ?',
+          variables: [Variable.withString('last_fts_sync')],
+        ).get();
+        if (rows.isNotEmpty) {
+          lastSync = rows.first.read<String>('value');
+        }
+      } catch (_) {}
+
+      // 2. Query PowerSync for pages updated since last sync
+      final changedPages = await _db.getAll(
+        'SELECT id, title, content_json, updated_at, is_deleted FROM pages WHERE updated_at > ?',
+        [lastSync],
+      );
+
+      if (changedPages.isEmpty) return;
+
+      // 3. Process each changed page
+      String newestTimestamp = lastSync;
+      for (final row in changedPages) {
+        final pageId = row['id'] as String;
+        final title = row['title'] as String;
+        final contentJson = row['content_json'] as String;
+        final updatedAt = row['updated_at']?.toString() ?? lastSync;
+        final isDeleted = (row['is_deleted'] ?? 0) == 1;
+
+        if (isDeleted) {
+          // Remove deleted pages from FTS
+          await _driftDb.customStatement(
+            'DELETE FROM pages_search WHERE page_id = ?',
+            [pageId],
+          );
+        } else {
+          // Extract text on a background isolate (consistent with Issue 5)
+          final bodyText = await compute(extractPlainText, contentJson);
+          await _driftDb.customStatement(
+            'DELETE FROM pages_search WHERE page_id = ?',
+            [pageId],
+          );
+          await _driftDb.customStatement(
+            'INSERT INTO pages_search (page_id, title, body_text) VALUES (?, ?, ?)',
+            [pageId, title, bodyText],
+          );
+        }
+
+        // Track the newest timestamp
+        if (updatedAt.compareTo(newestTimestamp) > 0) {
+          newestTimestamp = updatedAt;
+        }
+      }
+
+      // 4. Save the new high-watermark
+      await _driftDb.customStatement(
+        'INSERT OR REPLACE INTO user_preferences (key, value) VALUES (?, ?)',
+        ['last_fts_sync', newestTimestamp],
+      );
+    } catch (_) {
+      // FTS incremental sync failure is non-fatal
     }
   }
 

@@ -35,14 +35,48 @@ final searchResultsProvider = FutureProvider<List<({String pageId, String title,
     }
   }
 
+  List<({String pageId, String title, String snippet})> rawResults;
   try {
-    return await repository.searchPages(ftsQuery);
+    rawResults = await repository.searchPages(ftsQuery);
   } catch (e) {
     // If syntax error in FTS5 query, fallback to normal query or return empty
     try {
-      return await repository.searchPages('"$query"*');
+      rawResults = await repository.searchPages('"$query"*');
     } catch (_) {
       return [];
     }
   }
+
+  // Hydrate each result with live data from SyncRepository (PowerSync)
+  final syncRepo = ref.read(syncRepoProvider);
+  final hydrated = <({String pageId, String title, String sectionName, String snippet})>[];
+
+  // Cache section lookups to avoid repeated queries
+  final sectionCache = <String, String?>{};
+
+  for (final raw in rawResults) {
+    final page = await syncRepo.getPage(raw.pageId);
+    // Skip deleted, missing, or locked pages
+    if (page == null || page.isDeleted || page.isLocked) continue;
+
+    // Resolve section name (with cache)
+    if (!sectionCache.containsKey(page.sectionId)) {
+      final section = await syncRepo.getSection(page.sectionId);
+      sectionCache[page.sectionId] =
+          (section != null && !section.isDeleted && !section.isLocked) ? section.title : null;
+    }
+
+    final sectionName = sectionCache[page.sectionId];
+    // Skip if section is deleted or missing
+    if (sectionName == null) continue;
+
+    hydrated.add((
+      pageId: raw.pageId,
+      title: page.title,
+      sectionName: sectionName,
+      snippet: raw.snippet,
+    ));
+  }
+
+  return hydrated;
 });

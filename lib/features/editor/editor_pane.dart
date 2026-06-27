@@ -4,12 +4,14 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb, compute;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:appflowy_editor/appflowy_editor.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:markdown/markdown.dart' as md;
 import 'package:super_clipboard/super_clipboard.dart';
-import 'dart:typed_data';
-import 'dart:ui' show PointerDeviceKind;
+// ignore: implementation_imports
+import 'package:appflowy_editor/src/editor/find_replace_menu/find_replace_widget.dart';
+
 
 import '../../core/sync/sync_repository.dart';
 import '../../core/sync/sync_providers.dart';
@@ -56,6 +58,10 @@ class EditorPaneState extends ConsumerState<EditorPane> {
   SettingsState? _lastCachedSettings;
   Brightness? _lastCachedBrightness;
 
+  OverlayEntry? _contextMenuOverlay;
+  Timer? _contextMenuDebounceTimer;
+  bool _showFindReplace = false;
+
   @override
   void initState() {
     super.initState();
@@ -64,6 +70,10 @@ class EditorPaneState extends ConsumerState<EditorPane> {
 
   @override
   void dispose() {
+    _contextMenuDebounceTimer?.cancel();
+    _contextMenuOverlay?.remove();
+    _contextMenuOverlay = null;
+
     if (_debounceTimer?.isActive ?? false) {
       _debounceTimer!.cancel();
       if (_currentlyLoadedPageId != null && _editorState != null && _hasUnsavedChanges) {
@@ -84,6 +94,114 @@ class EditorPaneState extends ConsumerState<EditorPane> {
     _editorScrollController?.dispose();
     _editorState?.dispose();
     super.dispose();
+  }
+
+  void _onSelectionChanged() {
+    _contextMenuDebounceTimer?.cancel();
+    _contextMenuOverlay?.remove();
+    _contextMenuOverlay = null;
+
+    final selection = _editorState?.selection;
+    if (selection == null || selection.isCollapsed) return;
+
+    _contextMenuDebounceTimer = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      _showContextMenuOverlay();
+    });
+  }
+
+  void _showContextMenuOverlay() {
+    final editorState = _editorState;
+    if (editorState == null) return;
+    final selection = editorState.selection;
+    if (selection == null || selection.isCollapsed) return;
+
+    final selectionRects = editorState.service.selectionService.selectionRects;
+    if (selectionRects.isEmpty) return;
+
+    final RenderBox? renderBox = context.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+
+    final firstRect = selectionRects.first;
+    final offset = renderBox.localToGlobal(firstRect.topLeft);
+    
+    final screenSize = MediaQuery.of(context).size;
+    final estimatedWidth = 160.0;
+    final estimatedHeight = 160.0;
+
+    double left = offset.dx;
+    if (left + estimatedWidth > screenSize.width - 16) {
+      left = screenSize.width - estimatedWidth - 16;
+    }
+    if (left < 16) left = 16;
+
+    double top = offset.dy + firstRect.height + 10;
+    if (top + estimatedHeight > screenSize.height - 16) {
+      // Flip to above the text if it overflows the bottom
+      top = offset.dy - estimatedHeight - 10;
+    }
+    if (top < 16) top = 16;
+
+    final overlayState = Overlay.of(context, rootOverlay: true);
+    final colors = AppTheme.colorsOf(context);
+
+    _contextMenuOverlay = OverlayEntry(
+      builder: (context) {
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: () {
+                  _contextMenuOverlay?.remove();
+                  _contextMenuOverlay = null;
+                },
+                onPanDown: (_) {
+                  _contextMenuOverlay?.remove();
+                  _contextMenuOverlay = null;
+                },
+              ),
+            ),
+            Positioned(
+              left: left,
+              top: top,
+              child: Material(
+                color: colors.surfacePanel,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: BorderSide(color: colors.border),
+                ),
+                elevation: 4,
+                child: IntrinsicWidth(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: standardContextMenuItems.expand((e) => e).map((item) {
+                      return InkWell(
+                        onTap: () {
+                          item.onPressed(editorState);
+                          _contextMenuOverlay?.remove();
+                          _contextMenuOverlay = null;
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          child: Text(
+                            item.name,
+                            style: TextStyle(color: colors.inkPrimary, fontSize: 14),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+    
+    overlayState.insert(_contextMenuOverlay!);
   }
 
   /// Builds and caches all editor configuration objects.
@@ -184,8 +302,9 @@ class EditorPaneState extends ConsumerState<EditorPane> {
 
     _cachedCommandShortcuts = [
       _customPasteCommand,
+      _findReplaceCommand,
       ...standardCommandShortcutEvents.where(
-        (e) => e.key != 'paste the content',
+        (e) => e.key != 'paste the content' && e.key != 'show the find dialog' && e.key != 'show the find and replace dialog',
       ),
     ];
 
@@ -248,6 +367,7 @@ class EditorPaneState extends ConsumerState<EditorPane> {
     _debounceTimer?.cancel();
 
     final oldEditorState = _editorState;
+    oldEditorState?.selectionNotifier.removeListener(_onSelectionChanged);
     final oldScrollController = _editorScrollController;
     Timer(const Duration(milliseconds: 350), () {
       oldEditorState?.dispose();
@@ -298,6 +418,8 @@ class EditorPaneState extends ConsumerState<EditorPane> {
       editorState: newEditorState,
       shrinkWrap: false,
     );
+
+    newEditorState.selectionNotifier.addListener(_onSelectionChanged);
 
     _hasUnsavedChanges = false;
 
@@ -383,6 +505,21 @@ class EditorPaneState extends ConsumerState<EditorPane> {
       command: !kIsWeb && Platform.isMacOS ? 'meta+v' : 'ctrl+v',
       handler: (editorState) {
         _handleCustomPaste(editorState);
+        return KeyEventResult.handled;
+      },
+    );
+  }
+
+  CommandShortcutEvent get _findReplaceCommand {
+    return CommandShortcutEvent(
+      key: 'show the find dialog custom',
+      getDescription: () => 'Find and Replace',
+      command: 'ctrl+f',
+      macOSCommand: 'cmd+f',
+      handler: (editorState) {
+        setState(() {
+          _showFindReplace = !_showFindReplace;
+        });
         return KeyEventResult.handled;
       },
     );
@@ -647,59 +784,54 @@ class EditorPaneState extends ConsumerState<EditorPane> {
                   // Rebuild caches if settings or theme changed since last cache
                   _ensureEditorCaches(settings, Theme.of(context).brightness);
 
-                  return ScrollConfiguration(
-                    behavior: ScrollConfiguration.of(context).copyWith(
-                      scrollbars: false,
-                      physics: const BouncingScrollPhysics(),
-                      dragDevices: {
-                        PointerDeviceKind.touch,
-                        PointerDeviceKind.mouse,
-                        PointerDeviceKind.trackpad,
-                      },
-                    ),
-                    child: AppFlowyEditor(
-                    editorState: _editorState!,
-                    editorScrollController: _editorScrollController!,
-                    blockComponentBuilders: _cachedBlockBuilders!,
-                    editorStyle: _cachedEditorStyle!,
-                    commandShortcutEvents: _cachedCommandShortcuts!,
-                    characterShortcutEvents: _cachedCharacterShortcuts!,
-                    contextMenuBuilder: (context, position, editorState, onPressed) {
-                      return Positioned(
-                        left: position.dx,
-                        top: position.dy,
-                        child: Material(
-                          color: colors.surfacePanel,
-                          shape: RoundedRectangleBorder(
+                  return Stack(
+                    children: [
+                      AppFlowyEditor(
+                        editorState: _editorState!,
+                        editorScrollController: _editorScrollController!,
+                        blockComponentBuilders: _cachedBlockBuilders!,
+                        editorStyle: _cachedEditorStyle!,
+                        commandShortcutEvents: _cachedCommandShortcuts!,
+                        characterShortcutEvents: _cachedCharacterShortcuts!,
+                      ),
+                      if (_showFindReplace)
+                        Positioned(
+                          top: 16,
+                          right: isMobileWidth ? 16 : 16,
+                          left: isMobileWidth ? 16 : null,
+                          child: Material(
+                            color: colors.surfacePanel,
+                            elevation: 4,
                             borderRadius: BorderRadius.circular(8),
-                            side: BorderSide(color: colors.border),
-                          ),
-                          elevation: 4,
-                          child: IntrinsicWidth(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: standardContextMenuItems.expand((e) => e).map((item) {
-                                return InkWell(
-                                  onTap: () {
-                                    item.onPressed(editorState);
-                                    onPressed();
-                                  },
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                    child: Text(
-                                      item.name,
-                                      style: TextStyle(color: colors.inkPrimary, fontSize: 14),
+                            child: Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: CallbackShortcuts(
+                                bindings: {
+                                  const SingleActivator(LogicalKeyboardKey.keyF, control: true): () => setState(() => _showFindReplace = false),
+                                  const SingleActivator(LogicalKeyboardKey.keyF, meta: true): () => setState(() => _showFindReplace = false),
+                                  const SingleActivator(LogicalKeyboardKey.escape): () => setState(() => _showFindReplace = false),
+                                },
+                                child: Focus(
+                                  autofocus: false, // FindAndReplaceMenuWidget handles its own autofocus, but Focus acts as a boundary
+                                  child: SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    child: FindAndReplaceMenuWidget(
+                                      editorState: _editorState!,
+                                      showReplaceMenu: false,
+                                      onDismiss: () => setState(() => _showFindReplace = false),
+                                      style: FindReplaceStyle(
+                                        selectedHighlightColor: colors.accent,
+                                        unselectedHighlightColor: colors.accent.withValues(alpha: 0.3),
+                                      ),
                                     ),
                                   ),
-                                );
-                              }).toList(),
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                      );
-                    },
-                  ));
+                    ],
+                  );
                 },
               ),
             );
@@ -718,6 +850,11 @@ class EditorPaneState extends ConsumerState<EditorPane> {
             colors: colors,
             editorState: activePageId == null ? null : _editorState,
             settings: settings,
+            onToggleFindReplace: () {
+              setState(() {
+                _showFindReplace = !_showFindReplace;
+              });
+            },
           ),
           Expanded(
             child: AnimatedSwitcher(

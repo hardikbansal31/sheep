@@ -252,18 +252,15 @@ class SheepRepository {
 
   // ── Search ───────────────────────────────────────────────
 
-  Future<List<({String pageId, String title, String sectionName, String snippet})>> searchPages(
+  Future<List<({String pageId, String title, String snippet})>> searchPages(
     String query,
   ) async {
     final results = await _db.customSelect(
       '''
-      SELECT ps.page_id, ps.title, 
-             snippet(pages_search, 2, '<b>', '</b>', '...', 32) as snip,
-             s.title as section_name
+      SELECT ps.page_id, ps.title,
+             snippet(pages_search, 2, '<b>', '</b>', '...', 32) as snip
       FROM pages_search ps
-      JOIN pages p ON p.id = ps.page_id
-      JOIN sections s ON s.id = p.section_id
-      WHERE pages_search MATCH ? AND p.is_deleted = 0 AND s.is_deleted = 0
+      WHERE pages_search MATCH ?
       ORDER BY rank
       ''',
       variables: [Variable.withString(query)],
@@ -273,7 +270,6 @@ class SheepRepository {
         .map((row) => (
               pageId: row.read<String>('page_id'),
               title: row.read<String>('title'),
-              sectionName: row.read<String>('section_name'),
               snippet: row.read<String>('snip'),
             ))
         .toList();

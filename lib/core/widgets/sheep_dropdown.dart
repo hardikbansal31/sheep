@@ -20,6 +20,7 @@ class SheepDropdown<T> extends StatefulWidget {
   final Widget Function(BuildContext context, SheepDropdownItem<T> selectedItem)? selectedItemBuilder;
   final double dropdownWidth;
   final double maxDropdownHeight;
+  final bool alignRight;
 
   const SheepDropdown({
     super.key,
@@ -29,6 +30,7 @@ class SheepDropdown<T> extends StatefulWidget {
     this.selectedItemBuilder,
     this.dropdownWidth = 150,
     this.maxDropdownHeight = 300,
+    this.alignRight = false,
   });
 
   @override
@@ -105,11 +107,11 @@ class _SheepDropdownState<T> extends State<SheepDropdown<T>> with SingleTickerPr
               ),
               CompositedTransformFollower(
                 link: _layerLink,
-                targetAnchor: Alignment.bottomLeft,
-                followerAnchor: Alignment.topLeft,
+                targetAnchor: widget.alignRight ? Alignment.bottomRight : Alignment.bottomLeft,
+                followerAnchor: widget.alignRight ? Alignment.topRight : Alignment.topLeft,
                 offset: const Offset(0, 4),
                 child: Align(
-                  alignment: Alignment.topLeft,
+                  alignment: widget.alignRight ? Alignment.topRight : Alignment.topLeft,
                   child: FadeTransition(
                     opacity: _fadeAnimation,
                     child: ScaleTransition(

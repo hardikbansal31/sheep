@@ -1,9 +1,11 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'app.dart';
 import 'core/providers.dart';
@@ -13,13 +15,36 @@ import 'core/sync/sync_config.dart';
 import 'core/sync/sync_providers.dart';
 import 'features/settings/providers.dart';
 
+class WindowSizeListener extends WindowListener {
+  @override
+  void onWindowResized() async {
+    try {
+      final size = await windowManager.getSize();
+      final docDir = await getApplicationDocumentsDirectory();
+      final file = File('${docDir.path}/window_size.json');
+      await file.writeAsString(jsonEncode({'width': size.width, 'height': size.height}));
+    } catch (_) {}
+  }
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
     await windowManager.ensureInitialized();
-    WindowOptions windowOptions = const WindowOptions(
-      size: Size(1200, 800),
+    
+    Size initialSize = const Size(1200, 800);
+    try {
+      final docDir = await getApplicationDocumentsDirectory();
+      final file = File('${docDir.path}/window_size.json');
+      if (file.existsSync()) {
+        final json = jsonDecode(file.readAsStringSync());
+        initialSize = Size((json['width'] as num).toDouble(), (json['height'] as num).toDouble());
+      }
+    } catch (_) {}
+
+    WindowOptions windowOptions = WindowOptions(
+      size: initialSize,
       center: true,
       backgroundColor: Colors.transparent,
       skipTaskbar: false,
@@ -29,6 +54,7 @@ void main() async {
     windowManager.waitUntilReadyToShow(windowOptions, () async {
       await windowManager.show();
       await windowManager.focus();
+      windowManager.addListener(WindowSizeListener());
     });
   }
 

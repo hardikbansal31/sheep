@@ -22,7 +22,7 @@ class SettingsModal extends ConsumerWidget {
         backgroundColor: colors.surfaceBase,
         child: SafeArea(
           child: Container(
-            padding: const EdgeInsets.all(AppSpacing.xl),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.md),
             child: settingsAsync.when(
               data: (settings) => _SettingsContent(settings: settings, isMobileWidth: true),
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -125,6 +125,7 @@ class _SettingsContentState extends ConsumerState<_SettingsContent> {
                   child: SheepDropdown<ThemeMode>(
                     value: settings.themeMode,
                     dropdownWidth: 100,
+                    alignRight: true,
                     items: const [
                       SheepDropdownItem(value: ThemeMode.system, label: 'System'),
                       SheepDropdownItem(value: ThemeMode.light, label: 'Light'),
@@ -170,6 +171,7 @@ class _SettingsContentState extends ConsumerState<_SettingsContent> {
                   child: SheepDropdown<double>(
                     value: settings.defaultFontSize,
                     dropdownWidth: 100,
+                    alignRight: true,
                     items: [10.0, 11.0, 12.0, 13.0, 14.0, 16.0, 18.0, 20.0, 24.0, 28.0, 32.0, 36.0, 48.0]
                         .map((size) => SheepDropdownItem(value: size, label: '${size.toInt()}pt'))
                         .toList(),
@@ -331,6 +333,7 @@ class _FontDropdownRow extends StatelessWidget {
       child: SheepDropdown<String>(
         value: safeValue,
         dropdownWidth: 160,
+        alignRight: true,
         items: _fontOptions
             .map((font) => SheepDropdownItem(value: font, label: font))
             .toList(),
