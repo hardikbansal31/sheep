@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../core/update/update_service.dart';
 import '../../core/widgets/sheep_dropdown.dart';
 import 'providers.dart';
 import 'settings_state.dart';
@@ -49,24 +50,48 @@ class SettingsModal extends ConsumerWidget {
   }
 }
 
-class _SettingsContent extends ConsumerWidget {
+class _SettingsContent extends ConsumerStatefulWidget {
   const _SettingsContent({required this.settings, required this.isMobileWidth});
 
   final SettingsState settings;
   final bool isMobileWidth;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_SettingsContent> createState() => _SettingsContentState();
+}
+
+class _SettingsContentState extends ConsumerState<_SettingsContent> {
+  bool _isCheckingUpdate = false;
+  String? _updateMessage;
+
+  Future<void> _checkForUpdates() async {
+    setState(() {
+      _isCheckingUpdate = true;
+      _updateMessage = null;
+    });
+
+    final result = await UpdateService.instance.checkManually(context);
+
+    if (!mounted) return;
+    setState(() {
+      _isCheckingUpdate = false;
+      _updateMessage = result.message;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final colors = AppTheme.colorsOf(context);
+    final settings = widget.settings;
     final uiScale = settings.uiScale;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: isMobileWidth ? MainAxisSize.max : MainAxisSize.min,
+      mainAxisSize: widget.isMobileWidth ? MainAxisSize.max : MainAxisSize.min,
       children: [
         Row(
           children: [
-            if (isMobileWidth) ...[
+            if (widget.isMobileWidth) ...[
               IconButton(
                 icon: Icon(Icons.arrow_back, color: colors.inkPrimary),
                 onPressed: () => Navigator.of(context).pop(),
@@ -149,6 +174,61 @@ class _SettingsContent extends ConsumerWidget {
                         .map((size) => SheepDropdownItem(value: size, label: '${size.toInt()}pt'))
                         .toList(),
                     onChanged: (val) => ref.read(settingsProvider.notifier).setDefaultFontSize(val),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xl),
+                _SectionTitle(title: 'Updates', colors: colors, uiScale: uiScale),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'App Updates',
+                              style: TextStyle(color: colors.inkPrimary, fontSize: 14 * uiScale),
+                            ),
+                            if (_updateMessage != null) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                _updateMessage!,
+                                style: TextStyle(color: colors.inkSecondary, fontSize: 12 * uiScale),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      SizedBox(
+                        height: 36,
+                        child: _isCheckingUpdate
+                            ? SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: colors.accent,
+                                ),
+                              )
+                            : TextButton(
+                                style: TextButton.styleFrom(
+                                  foregroundColor: colors.accent,
+                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    side: BorderSide(color: colors.border),
+                                  ),
+                                ),
+                                onPressed: _checkForUpdates,
+                                child: Text(
+                                  'Check for Updates',
+                                  style: TextStyle(fontSize: 13 * uiScale),
+                                ),
+                              ),
+                      ),
+                    ],
                   ),
                 ),
               ],

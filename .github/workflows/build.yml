@@ -34,17 +34,19 @@ jobs:
         run: attrib -h C:\Users\runneradmin\AppData
 
       - name: Build Windows release
-        run: flutter build windows --release
+        shell: bash
+        run: flutter build windows --release --build-name=${GITHUB_REF_NAME#v} --build-number=${GITHUB_RUN_NUMBER}
 
-      - name: Compress Windows release
-        shell: pwsh
-        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath build/windows/sheep-windows.zip
+      - name: Compile Inno Setup installer
+        shell: cmd
+        run: |
+          "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
 
-      - name: Upload EXE artifact
+      - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-build
-          path: build/windows/sheep-windows.zip
+          path: build/windows/installer/*.exe
 
 
   # ─────────────────────────────────────────────
@@ -122,7 +124,7 @@ jobs:
         run: flutter pub get
 
       - name: Build Linux release
-        run: flutter build linux --release
+        run: flutter build linux --release --build-name=${GITHUB_REF_NAME#v} --build-number=${GITHUB_RUN_NUMBER}
 
       - name: Package as .deb
         run: |
@@ -200,7 +202,7 @@ jobs:
         run: flutter pub get
 
       - name: Build macOS release
-        run: flutter build macos --release
+        run: flutter build macos --release --build-name=${GITHUB_REF_NAME#v} --build-number=${GITHUB_RUN_NUMBER}
 
       - name: Install create-dmg
         run: brew install create-dmg
@@ -241,7 +243,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            windows-build/sheep-windows.zip
+            windows-build/*.exe
             android-apk/app-release.apk
             linux-deb/*.deb
             macos-dmg/sheep-macos.dmg

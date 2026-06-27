@@ -6,7 +6,7 @@ Since Sheep is not distributed on app stores, we need a cross-platform way to no
 
 We will implement a custom, lightweight update checker rather than relying on heavy third-party auto-updater packages. This approach guarantees compatibility across all platforms (Windows, Linux, macOS, Android, iOS) and is very easy to maintain.
 
-We will also add an `installer.iss` script at the root directory. This script allows Windows users to compile a professional, single-executable installer using Inno Setup, packaging the compiled Flutter Windows release.
+We will also add an `installer.iss` script at the root directory (its there but its not working currently, github still builds a .zip). This script allows Windows users to compile a professional, single-executable installer using Inno Setup, packaging the compiled Flutter Windows release.
 
 ## Proposed Changes
 
@@ -27,7 +27,7 @@ A new service class that handles the update logic:
 ### [App Lifecycle]
 
 #### [MODIFY] [main_layout.dart](file:///home/hardik/projects/sheep/lib/features/layout/layout_shell.dart) or similar
-- We will inject the `checkForUpdates` call into the initial application load (e.g., in a post-frame callback in the main app layout) so that it runs exactly once per app session.
+- We will inject the `checkForUpdates` call into the initial application load (e.g., in a post-frame callback in the main app layout) so that it runs exactly once per app session (offload it to a background thread so it doesnt block main ui. it should silently fail if internet is not present and then the application should run unaffected. add a check for updates button in settings page with a spinner as well. ).
 
 ### [Windows Installer]
 
