@@ -592,7 +592,7 @@ class EditorTopBarState extends ConsumerState<EditorTopBar> {
           ),
 
           // Right side fixed items
-          if (ref.watch(unlockedSessionProvider).isNotEmpty)
+          if (ref.watch(unlockedSessionProvider.select((s) => s.isNotEmpty)))
             _iconBtn(Icons.lock_reset, 'Lock active items', () {
               ref.read(unlockedSessionProvider.notifier).clear();
               if (isMobileWidth) {

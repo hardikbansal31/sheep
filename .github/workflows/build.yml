@@ -35,7 +35,12 @@ jobs:
 
       - name: Build Windows release
         shell: bash
-        run: flutter build windows --release --build-name=${GITHUB_REF_NAME#v} --build-number=${GITHUB_RUN_NUMBER}
+        run: |
+          if [[ "${GITHUB_REF_NAME}" == v* ]]; then
+            flutter build windows --release --build-name=${GITHUB_REF_NAME#v} --build-number=${GITHUB_RUN_NUMBER}
+          else
+            flutter build windows --release
+          fi
 
       - name: Compile Inno Setup installer
         shell: cmd
@@ -63,6 +68,7 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '21'
+          cache: 'gradle'
 
       - uses: subosito/flutter-action@v2
         with:
@@ -84,7 +90,11 @@ jobs:
             echo "$KEYSTORE_BASE64" | base64 --decode > android/app/release.keystore
             export KEYSTORE_PATH=$(pwd)/android/app/release.keystore
           fi
-          flutter build apk --release --build-name=${GITHUB_REF_NAME#v} --build-number=${GITHUB_RUN_NUMBER}
+          if [[ "${GITHUB_REF_NAME}" == v* ]]; then
+            flutter build apk --release --build-name=${GITHUB_REF_NAME#v} --build-number=${GITHUB_RUN_NUMBER}
+          else
+            flutter build apk --release
+          fi
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -124,7 +134,12 @@ jobs:
         run: flutter pub get
 
       - name: Build Linux release
-        run: flutter build linux --release --build-name=${GITHUB_REF_NAME#v} --build-number=${GITHUB_RUN_NUMBER}
+        run: |
+          if [[ "${GITHUB_REF_NAME}" == v* ]]; then
+            flutter build linux --release --build-name=${GITHUB_REF_NAME#v} --build-number=${GITHUB_RUN_NUMBER}
+          else
+            flutter build linux --release
+          fi
 
       - name: Package as .deb
         run: |
@@ -198,11 +213,32 @@ jobs:
       - name: Enable macOS desktop
         run: flutter config --enable-macos-desktop
 
+      - name: Cache Xcode Derived Data
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Developer/Xcode/DerivedData
+          key: ${{ runner.os }}-xcode-deriveddata-${{ hashFiles('**/pubspec.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-xcode-deriveddata-
+
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: macos/Pods
+          key: ${{ runner.os }}-pods-${{ hashFiles('macos/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
+
       - name: Get dependencies
         run: flutter pub get
 
       - name: Build macOS release
-        run: flutter build macos -v --release
+        run: |
+          if [[ "${GITHUB_REF_NAME}" == v* ]]; then
+            flutter build macos -v --release --build-name=${GITHUB_REF_NAME#v} --build-number=${GITHUB_RUN_NUMBER}
+          else
+            flutter build macos -v --release
+          fi
 
       - name: Install create-dmg
         run: brew install create-dmg

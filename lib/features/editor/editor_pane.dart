@@ -59,7 +59,6 @@ class EditorPaneState extends ConsumerState<EditorPane> {
   Brightness? _lastCachedBrightness;
 
   OverlayEntry? _contextMenuOverlay;
-  Timer? _contextMenuDebounceTimer;
   bool _showFindReplace = false;
 
   @override
@@ -70,7 +69,6 @@ class EditorPaneState extends ConsumerState<EditorPane> {
 
   @override
   void dispose() {
-    _contextMenuDebounceTimer?.cancel();
     _contextMenuOverlay?.remove();
     _contextMenuOverlay = null;
 
@@ -97,48 +95,42 @@ class EditorPaneState extends ConsumerState<EditorPane> {
   }
 
   void _onSelectionChanged() {
-    _contextMenuDebounceTimer?.cancel();
+    // Dismiss context menu when selection changes (e.g. user taps elsewhere)
+    _contextMenuOverlay?.remove();
+    _contextMenuOverlay = null;
+  }
+
+  void _onRightClick(Offset globalPosition) {
     _contextMenuOverlay?.remove();
     _contextMenuOverlay = null;
 
-    final selection = _editorState?.selection;
-    if (selection == null || selection.isCollapsed) return;
-
-    _contextMenuDebounceTimer = Timer(const Duration(milliseconds: 300), () {
-      if (!mounted) return;
-      _showContextMenuOverlay();
-    });
-  }
-
-  void _showContextMenuOverlay() {
     final editorState = _editorState;
     if (editorState == null) return;
     final selection = editorState.selection;
     if (selection == null || selection.isCollapsed) return;
 
-    final selectionRects = editorState.service.selectionService.selectionRects;
-    if (selectionRects.isEmpty) return;
+    _showContextMenuOverlay(globalPosition);
+  }
 
-    final RenderBox? renderBox = context.findRenderObject() as RenderBox?;
-    if (renderBox == null) return;
+  void _showContextMenuOverlay(Offset globalPosition) {
+    final editorState = _editorState;
+    if (editorState == null) return;
+    final selection = editorState.selection;
+    if (selection == null || selection.isCollapsed) return;
 
-    final firstRect = selectionRects.first;
-    final offset = renderBox.localToGlobal(firstRect.topLeft);
-    
     final screenSize = MediaQuery.of(context).size;
-    final estimatedWidth = 160.0;
-    final estimatedHeight = 160.0;
+    const estimatedWidth = 160.0;
+    const estimatedHeight = 160.0;
 
-    double left = offset.dx;
+    double left = globalPosition.dx;
     if (left + estimatedWidth > screenSize.width - 16) {
       left = screenSize.width - estimatedWidth - 16;
     }
     if (left < 16) left = 16;
 
-    double top = offset.dy + firstRect.height + 10;
+    double top = globalPosition.dy;
     if (top + estimatedHeight > screenSize.height - 16) {
-      // Flip to above the text if it overflows the bottom
-      top = offset.dy - estimatedHeight - 10;
+      top = globalPosition.dy - estimatedHeight;
     }
     if (top < 16) top = 16;
 
@@ -718,7 +710,9 @@ class EditorPaneState extends ConsumerState<EditorPane> {
   Widget build(BuildContext context) {
     final colors = AppTheme.colorsOf(context);
     final activePageId = ref.watch(activePageProvider);
-    final session = ref.watch(unlockedSessionProvider);
+    final isCurrentPageUnlocked = ref.watch(
+      unlockedSessionProvider.select((s) => s.contains(activePageId ?? '')),
+    );
     final settings = ref.watch(
       settingsProvider.select((s) => s.value ?? const SettingsState()),
     );
@@ -742,7 +736,7 @@ class EditorPaneState extends ConsumerState<EditorPane> {
               return const Center(child: Text('Page not found'));
             }
 
-            if (page.isLocked && !session.contains(page.id) && !session.contains(page.sectionId)) {
+            if (page.isLocked && !isCurrentPageUnlocked && !ref.read(unlockedSessionProvider).contains(page.sectionId)) {
               return Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -786,13 +780,20 @@ class EditorPaneState extends ConsumerState<EditorPane> {
 
                   return Stack(
                     children: [
-                      AppFlowyEditor(
-                        editorState: _editorState!,
-                        editorScrollController: _editorScrollController!,
-                        blockComponentBuilders: _cachedBlockBuilders!,
-                        editorStyle: _cachedEditorStyle!,
-                        commandShortcutEvents: _cachedCommandShortcuts!,
-                        characterShortcutEvents: _cachedCharacterShortcuts!,
+                      GestureDetector(
+                        onSecondaryTapDown: (details) {
+                          _onRightClick(details.globalPosition);
+                        },
+                        child: ExcludeSemantics(
+                          child: AppFlowyEditor(
+                            editorState: _editorState!,
+                            editorScrollController: _editorScrollController!,
+                            blockComponentBuilders: _cachedBlockBuilders!,
+                            editorStyle: _cachedEditorStyle!,
+                            commandShortcutEvents: _cachedCommandShortcuts!,
+                            characterShortcutEvents: _cachedCharacterShortcuts!,
+                          ),
+                        ),
                       ),
                       if (_showFindReplace)
                         Positioned(
@@ -846,15 +847,17 @@ class EditorPaneState extends ConsumerState<EditorPane> {
       color: colors.surfaceBase,
       child: Column(
         children: [
-          EditorTopBar(
-            colors: colors,
-            editorState: activePageId == null ? null : _editorState,
-            settings: settings,
-            onToggleFindReplace: () {
-              setState(() {
-                _showFindReplace = !_showFindReplace;
-              });
-            },
+          RepaintBoundary(
+            child: EditorTopBar(
+              colors: colors,
+              editorState: activePageId == null ? null : _editorState,
+              settings: settings,
+              onToggleFindReplace: () {
+                setState(() {
+                  _showFindReplace = !_showFindReplace;
+                });
+              },
+            ),
           ),
           Expanded(
             child: AnimatedSwitcher(

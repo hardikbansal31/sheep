@@ -27,7 +27,6 @@ class _MobileShellState extends ConsumerState<MobileShell> {
   Widget build(BuildContext context) {
     final index = ref.watch(mobileNavIndexProvider);
     final colors = AppTheme.colorsOf(context);
-    final unlockedSession = ref.watch(unlockedSessionProvider);
 
     final isForward = index >= _previousIndex;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -88,14 +87,7 @@ class _MobileShellState extends ConsumerState<MobileShell> {
         centerTitle: false,
         elevation: 0,
         actions: [
-          if (unlockedSession.isNotEmpty)
-            IconButton(
-              icon: Icon(Icons.lock_reset, color: colors.accent),
-              onPressed: () {
-                ref.read(unlockedSessionProvider.notifier).clear();
-              },
-              tooltip: 'Lock active items',
-            ),
+          const _LockResetButton(),
           if (index == 0) ...[
             IconButton(
               icon: Icon(Icons.settings_outlined, color: colors.inkSecondary),
@@ -479,6 +471,30 @@ class _MobilePages extends ConsumerWidget {
           child: Text('Error loading pages', style: TextStyle(color: colors.inkMuted)),
         ),
       ),
+    );
+  }
+}
+
+/// Isolated widget for the lock-reset button in the mobile AppBar.
+/// Uses `.select` to only rebuild when the session set transitions
+/// between empty ↔ non-empty, instead of on every mutation.
+class _LockResetButton extends ConsumerWidget {
+  const _LockResetButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final hasUnlocked = ref.watch(
+      unlockedSessionProvider.select((s) => s.isNotEmpty),
+    );
+    if (!hasUnlocked) return const SizedBox.shrink();
+
+    final colors = AppTheme.colorsOf(context);
+    return IconButton(
+      icon: Icon(Icons.lock_reset, color: colors.accent),
+      onPressed: () {
+        ref.read(unlockedSessionProvider.notifier).clear();
+      },
+      tooltip: 'Lock active items',
     );
   }
 }

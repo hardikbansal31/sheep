@@ -80,7 +80,9 @@ class _Header extends ConsumerWidget {
     final uiScale = ref.watch(
       settingsProvider.select((s) => (s.value ?? const SettingsState()).uiScale),
     );
-    final unlockedSession = ref.watch(unlockedSessionProvider);
+    final hasUnlockedSessions = ref.watch(
+      unlockedSessionProvider.select((s) => s.isNotEmpty),
+    );
 
     return Container(
       height: AppSpacing.xxl,
@@ -98,7 +100,7 @@ class _Header extends ConsumerWidget {
             ),
           ),
           const Spacer(),
-          if (unlockedSession.isNotEmpty) ...[
+          if (hasUnlockedSessions) ...[
             IconButton(
               icon: Icon(Icons.lock_reset, color: colors.accent, size: 18),
               onPressed: () {
