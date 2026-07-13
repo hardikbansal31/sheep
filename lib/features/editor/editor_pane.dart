@@ -785,14 +785,56 @@ class EditorPaneState extends ConsumerState<EditorPane> {
                           _onRightClick(details.globalPosition);
                         },
                         child: ExcludeSemantics(
-                          child: AppFlowyEditor(
-                            editorState: _editorState!,
-                            editorScrollController: _editorScrollController!,
-                            blockComponentBuilders: _cachedBlockBuilders!,
-                            editorStyle: _cachedEditorStyle!,
-                            commandShortcutEvents: _cachedCommandShortcuts!,
-                            characterShortcutEvents: _cachedCharacterShortcuts!,
-                          ),
+                          child: (Platform.isIOS || Platform.isAndroid)
+                              ? MobileFloatingToolbar(
+                                  editorState: _editorState!,
+                                  editorScrollController: _editorScrollController!,
+                                  floatingToolbarHeight: 40,
+                                  toolbarBuilder: (context, anchor, closeToolbar) {
+                                    return AdaptiveTextSelectionToolbar.editable(
+                                      clipboardStatus: ClipboardStatus.pasteable,
+                                      onCopy: () {
+                                        copyCommand.execute(_editorState!);
+                                        closeToolbar();
+                                      },
+                                      onCut: () {
+                                        cutCommand.execute(_editorState!);
+                                        closeToolbar();
+                                      },
+                                      onPaste: () {
+                                        pasteCommand.execute(_editorState!);
+                                        closeToolbar();
+                                      },
+                                      onSelectAll: () {
+                                        selectAllCommand.execute(_editorState!);
+                                        closeToolbar();
+                                      },
+                                      onLiveTextInput: null,
+                                      onLookUp: null,
+                                      onSearchWeb: null,
+                                      onShare: null,
+                                      anchors: TextSelectionToolbarAnchors(
+                                        primaryAnchor: anchor,
+                                      ),
+                                    );
+                                  },
+                                  child: AppFlowyEditor(
+                                    editorState: _editorState!,
+                                    editorScrollController: _editorScrollController!,
+                                    blockComponentBuilders: _cachedBlockBuilders!,
+                                    editorStyle: _cachedEditorStyle!,
+                                    commandShortcutEvents: _cachedCommandShortcuts!,
+                                    characterShortcutEvents: _cachedCharacterShortcuts!,
+                                  ),
+                                )
+                              : AppFlowyEditor(
+                                  editorState: _editorState!,
+                                  editorScrollController: _editorScrollController!,
+                                  blockComponentBuilders: _cachedBlockBuilders!,
+                                  editorStyle: _cachedEditorStyle!,
+                                  commandShortcutEvents: _cachedCommandShortcuts!,
+                                  characterShortcutEvents: _cachedCharacterShortcuts!,
+                                ),
                         ),
                       ),
                       if (_showFindReplace)
