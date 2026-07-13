@@ -76,7 +76,14 @@ class AuthWrapper extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final supabase = ref.watch(supabaseProvider);
     final authState = ref.watch(authStateProvider);
+
+    // Offline-first override: If we have a persisted session (even if expired),
+    // we bypass transient stream errors or loading states.
+    if (supabase.auth.currentSession != null) {
+      return const MainAppWrapper();
+    }
 
     return authState.when(
       data: (state) {
