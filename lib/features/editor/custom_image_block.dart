@@ -54,21 +54,12 @@ class CustomImageBlockComponentWidget extends BlockComponentStatefulWidget {
 class _CustomImageBlockComponentWidgetState extends State<CustomImageBlockComponentWidget>
     with
         SelectableMixin,
-        DefaultSelectableMixin,
         BlockComponentConfigurable,
         BlockComponentBackgroundColorMixin,
         BlockComponentAlignMixin {
   
-  @override
-  final forwardKey = GlobalKey(debugLabel: 'custom_image_block');
-
-  @override
-  GlobalKey<State<StatefulWidget>> get containerKey => widget.node.key;
-
-  @override
-  GlobalKey<State<StatefulWidget>> blockComponentKey = GlobalKey(
-    debugLabel: 'image',
-  );
+  final imageKey = GlobalKey(debugLabel: 'custom_image_block');
+  RenderBox? get _renderBox => context.findRenderObject() as RenderBox?;
 
   @override
   BlockComponentConfiguration get configuration => widget.configuration;
@@ -173,6 +164,7 @@ class _CustomImageBlockComponentWidgetState extends State<CustomImageBlockCompon
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 8.0),
           child: Container(
+            key: imageKey,
             alignment: alignment,
             child: imageWidget,
           ),
@@ -203,4 +195,75 @@ class _CustomImageBlockComponentWidgetState extends State<CustomImageBlockCompon
 
     return child;
   }
+
+  @override
+  Position start() => Position(path: widget.node.path, offset: 0);
+
+  @override
+  Position end() => Position(path: widget.node.path, offset: 1);
+
+  @override
+  Position getPositionInOffset(Offset start) => end();
+
+  @override
+  bool get shouldCursorBlink => false;
+
+  @override
+  CursorStyle get cursorStyle => CursorStyle.cover;
+
+  @override
+  Rect getBlockRect({
+    bool shiftWithBaseOffset = false,
+  }) {
+    final imageBox = imageKey.currentContext?.findRenderObject();
+    if (imageBox is RenderBox) {
+      return Offset.zero & imageBox.size;
+    }
+    return Rect.zero;
+  }
+
+  @override
+  Rect? getCursorRectInPosition(
+    Position position, {
+    bool shiftWithBaseOffset = false,
+  }) {
+    if (_renderBox == null) {
+      return null;
+    }
+    final size = _renderBox!.size;
+    return Rect.fromLTWH(-size.width / 2.0, 0, size.width, size.height);
+  }
+
+  @override
+  List<Rect> getRectsInSelection(
+    Selection selection, {
+    bool shiftWithBaseOffset = false,
+  }) {
+    if (_renderBox == null) {
+      return [];
+    }
+    final parentBox = context.findRenderObject();
+    final imageBox = imageKey.currentContext?.findRenderObject();
+    if (parentBox is RenderBox && imageBox is RenderBox) {
+      return [
+        imageBox.localToGlobal(Offset.zero, ancestor: parentBox) &
+            imageBox.size,
+      ];
+    }
+    return [Offset.zero & _renderBox!.size];
+  }
+
+  @override
+  Selection getSelectionInRange(Offset start, Offset end) => Selection.single(
+        path: widget.node.path,
+        startOffset: 0,
+        endOffset: 1,
+      );
+
+  @override
+  Offset localToGlobal(
+    Offset offset, {
+    bool shiftWithBaseOffset = false,
+  }) =>
+      _renderBox!.localToGlobal(offset);
 }

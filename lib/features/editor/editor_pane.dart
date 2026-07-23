@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show Platform;
+import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb, compute;
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
@@ -931,6 +932,24 @@ class EditorPaneState extends ConsumerState<EditorPane> {
                   },
                 ),
                 textDecorationMobileToolbarItem,
+                MobileToolbarItem.action(
+                  itemIconBuilder: (context, editorState, service) => const Icon(Icons.image_rounded),
+                  actionHandler: (context, editorState) async {
+                    try {
+                      final result = await FilePicker.platform.pickFiles(
+                        type: FileType.image,
+                      );
+                      if (result != null && result.files.single.path != null) {
+                        final file = File(result.files.single.path!);
+                        final bytes = await file.readAsBytes();
+                        final extension = result.files.single.extension ?? 'png';
+                        await _processPastedImage(editorState, bytes, extension);
+                      }
+                    } catch (e) {
+                      debugPrint('Error picking image: $e');
+                    }
+                  },
+                ),
                 listMobileToolbarItem,
                 todoListMobileToolbarItem,
                 headingMobileToolbarItem,
