@@ -678,41 +678,8 @@ class EditorTopBarState extends ConsumerState<EditorTopBar> {
               : title.replaceAll(RegExp(r'[^\w\s]+'), '').replaceAll(' ', '_');
 
           if (value == 'markdown') {
-            final confirmed = await showDialog<bool>(
-              context: context,
-              builder: (context) => AlertDialog(
-                backgroundColor: widget.colors.surfacePanel,
-                title: Text(
-                  'Export Markdown',
-                  style: TextStyle(color: widget.colors.inkPrimary),
-                ),
-                content: Text(
-                  'Exporting to Markdown is lossy. Font families and precise font sizes will be dropped.',
-                  style: TextStyle(color: widget.colors.inkPrimary),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(false),
-                    child: Text(
-                      'Cancel',
-                      style: TextStyle(color: widget.colors.inkMuted),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(true),
-                    child: Text(
-                      'Continue',
-                      style: TextStyle(color: widget.colors.accent),
-                    ),
-                  ),
-                ],
-              ),
-            );
-
-            if (confirmed == true) {
-              final md = MarkdownExporter.export(contentStr);
-              await ExportService.exportString(md, '$safeTitle.md');
-            }
+            final md = MarkdownExporter.export(contentStr);
+            await ExportService.exportString(md, '$safeTitle.md');
           } else if (value == 'pdf') {
             final pdfBytes = await PdfExporter.export(contentStr);
             await ExportService.exportBytes(pdfBytes, '$safeTitle.pdf');
