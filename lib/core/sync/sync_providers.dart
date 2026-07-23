@@ -93,6 +93,7 @@ final authStateProvider =
 
 /// Convenience provider for the current user (null if not signed in).
 final currentUserProvider = Provider<User?>((ref) {
+  ref.watch(authStateProvider); // Watch stream to trigger rebuilds on sign in/out
   final supabase = ref.watch(supabaseProvider);
   return supabase.auth.currentUser;
 });

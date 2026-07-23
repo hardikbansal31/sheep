@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/update/update_service.dart';
 import '../../core/widgets/sheep_dropdown.dart';
+import '../../core/sync/sync_providers.dart';
+import '../../core/auth/auth_providers.dart';
 import 'providers.dart';
 import 'settings_state.dart';
 
@@ -84,6 +86,7 @@ class _SettingsContentState extends ConsumerState<_SettingsContent> {
     final colors = AppTheme.colorsOf(context);
     final settings = widget.settings;
     final uiScale = settings.uiScale;
+    final currentUser = ref.watch(currentUserProvider);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -117,6 +120,85 @@ class _SettingsContentState extends ConsumerState<_SettingsContent> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                _SectionTitle(title: 'Account', colors: colors, uiScale: uiScale),
+                if (currentUser != null) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            currentUser.email ?? 'Signed in',
+                            style: TextStyle(color: colors.inkPrimary, fontSize: 14 * uiScale),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        SizedBox(
+                          height: 36,
+                          child: TextButton(
+                            style: TextButton.styleFrom(
+                              foregroundColor: colors.accent,
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                side: BorderSide(color: colors.border),
+                              ),
+                            ),
+                            onPressed: () async {
+                              await ref.read(supabaseProvider).auth.signOut();
+                              ref.read(unlockedSessionProvider.notifier).clear();
+                              if (context.mounted) {
+                                Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+                              }
+                            },
+                            child: Text(
+                              'Sign Out',
+                              style: TextStyle(fontSize: 13 * uiScale),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ] else ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Offline mode (Sync disabled)',
+                            style: TextStyle(color: colors.inkPrimary, fontSize: 14 * uiScale),
+                          ),
+                        ),
+                        SizedBox(
+                          height: 36,
+                          child: TextButton(
+                            style: TextButton.styleFrom(
+                              foregroundColor: colors.accent,
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                side: BorderSide(color: colors.border),
+                              ),
+                            ),
+                            onPressed: () {
+                              ref.read(unlockedSessionProvider.notifier).clear();
+                              Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+                            },
+                            child: Text(
+                              'Sign In',
+                              style: TextStyle(fontSize: 13 * uiScale),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: AppSpacing.xl),
                 _SectionTitle(title: 'Appearance', colors: colors, uiScale: uiScale),
                 _SettingRow(
                   label: 'Theme',

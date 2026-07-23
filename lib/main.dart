@@ -90,11 +90,16 @@ void main() async {
   }
 
   // Listen for auth changes to connect/disconnect PowerSync.
-  supabase.auth.onAuthStateChange.listen((data) {
+  supabase.auth.onAuthStateChange.listen((data) async {
     if (data.event == AuthChangeEvent.signedIn) {
       powerSyncDb.connect(connector: SupabaseConnector(supabase));
     } else if (data.event == AuthChangeEvent.signedOut) {
-      powerSyncDb.disconnect();
+      await powerSyncDb.disconnectAndClear();
+      try {
+        await container.read(databaseProvider).customStatement('DELETE FROM pages_search');
+      } catch (e) {
+        debugPrint('Error clearing FTS5 pages_search on sign out: $e');
+      }
     }
   });
 
