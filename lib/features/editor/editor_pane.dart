@@ -25,7 +25,6 @@ import '../settings/providers.dart';
 import '../settings/settings_state.dart';
 import '../../core/auth/auth_providers.dart';
 import 'custom_code_block.dart';
-import 'custom_image_block.dart';
 import 'editor_top_bar.dart';
 import 'providers.dart';
 
@@ -207,7 +206,6 @@ class EditorPaneState extends ConsumerState<EditorPane> {
 
     _cachedBlockBuilders = {
       ...standardBlockComponentBuilderMap,
-      ImageBlockKeys.type: CustomImageBlockComponentBuilder(),
       'title': HeadingBlockComponentBuilder(
         configuration: BlockComponentConfiguration(
           padding: (node) =>
