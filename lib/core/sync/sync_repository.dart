@@ -137,6 +137,14 @@ class SyncRepository {
         .map((rows) => rows.map(SyncSection.fromRow).toList());
   }
 
+  Stream<List<SyncSection>> watchDeletedSections() {
+    return _db
+        .watch(
+          'SELECT * FROM sections WHERE is_deleted = 1 ORDER BY order_index ASC',
+        )
+        .map((rows) => rows.map(SyncSection.fromRow).toList());
+  }
+
   Future<SyncSection?> getSection(String id) async {
     final rows = await _db.getAll(
       'SELECT * FROM sections WHERE id = ?',
@@ -197,6 +205,26 @@ class SyncRepository {
     );
   }
 
+  Future<void> restoreSection(String id) async {
+    await _db.execute(
+      'UPDATE sections SET is_deleted = 0 WHERE id = ?',
+      [id],
+    );
+    await _db.execute(
+      'UPDATE pages SET is_deleted = 0 WHERE section_id = ?',
+      [id],
+    );
+    // Re-sync FTS for all pages in this section
+    final pages = await _db.getAll('SELECT id, title, content_json FROM pages WHERE section_id = ?', [id]);
+    for (final row in pages) {
+      final pageId = row['id'] as String;
+      final title = row['title'] as String;
+      final contentJson = row['content_json'] as String;
+      final bodyText = await compute(extractPlainText, contentJson);
+      await _syncFts(pageId, title, bodyText);
+    }
+  }
+
   Future<void> reorderSections(List<String> orderedIds) async {
     await _db.writeTransaction((tx) async {
       for (var i = 0; i < orderedIds.length; i++) {
@@ -229,6 +257,17 @@ class SyncRepository {
                   isLocked: (row['is_locked'] ?? 0) == 1,
                 ))
             .toList());
+  }
+
+  Stream<List<SyncPage>> watchDeletedPages() {
+    return _db
+        .watch(
+          'SELECT p.* FROM pages p '
+          'LEFT JOIN sections s ON p.section_id = s.id '
+          'WHERE p.is_deleted = 1 AND (s.is_deleted = 0 OR s.is_deleted IS NULL) '
+          'ORDER BY p.updated_at DESC',
+        )
+        .map((rows) => rows.map(SyncPage.fromRow).toList());
   }
 
   Future<SyncPage?> getPage(String id) async {
@@ -319,6 +358,21 @@ class SyncRepository {
       final bodyText = await compute(extractPlainText, page.contentJson);
       await _syncFts(id, page.title, bodyText);
     }
+  }
+
+  // ── Trash ────────────────────────────────────────────────
+
+  Future<void> emptyTrash() async {
+    // Get all deleted pages to remove them from FTS
+    final deletedPages = await _db.getAll('SELECT id FROM pages WHERE is_deleted = 1');
+    for (final row in deletedPages) {
+      await _deleteFts(row['id'] as String);
+    }
+    
+    // Hard delete all pages and sections that are soft-deleted
+    await _db.execute('DELETE FROM pages WHERE is_deleted = 1');
+    await _db.execute('DELETE FROM sections WHERE is_deleted = 1');
+    await _ensureNotEmpty();
   }
 
   // ── Empty state ──────────────────────────────────────────

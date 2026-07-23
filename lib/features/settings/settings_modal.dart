@@ -6,6 +6,7 @@ import '../../core/update/update_service.dart';
 import '../../core/widgets/sheep_dropdown.dart';
 import '../../core/sync/sync_providers.dart';
 import '../../core/auth/auth_providers.dart';
+import '../trash/trash_modal.dart';
 import 'providers.dart';
 import 'settings_state.dart';
 
@@ -111,6 +112,17 @@ class _SettingsContentState extends ConsumerState<_SettingsContent> {
                 fontSize: 20 * uiScale,
                 fontWeight: FontWeight.w600,
               ),
+            ),
+            const Spacer(),
+            IconButton(
+              icon: Icon(Icons.delete_outline_rounded, color: colors.inkSecondary),
+              tooltip: 'Trash Bin',
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (context) => const TrashModal(),
+                );
+              },
             ),
           ],
         ),
