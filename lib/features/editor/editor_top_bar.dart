@@ -388,12 +388,19 @@ class EditorTopBarState extends ConsumerState<EditorTopBar> {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  if (isMobileWidth)
+                  if (isMobileWidth) ...[
                     _iconBtn(Icons.arrow_back_rounded, 'Back', () {
                       ref.read(mobileNavIndexProvider.notifier).back();
                     }),
-                  if (isMobileWidth) const SizedBox(width: AppSpacing.sm),
-
+                    const SizedBox(width: AppSpacing.sm),
+                    _iconBtn(Icons.undo_rounded, 'Undo', () {
+                      editorState?.undoManager.undo();
+                    }),
+                    _iconBtn(Icons.redo_rounded, 'Redo', () {
+                      editorState?.undoManager.redo();
+                    }),
+                    const SizedBox(width: AppSpacing.sm),
+                  ],
                   if (!isMobileWidth && !showSections)
                     _iconBtn(Icons.view_sidebar_outlined, 'Show sections', () {
                       ref.read(sectionsPaneVisibleProvider.notifier).toggle();

@@ -65,6 +65,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/icons/sheep_icon.png
+    - assets/icons/github.png
 
 flutter_launcher_icons:
   android: true

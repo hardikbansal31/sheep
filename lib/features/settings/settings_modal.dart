@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/update/update_service.dart';
@@ -323,6 +324,68 @@ class _SettingsContentState extends ConsumerState<_SettingsContent> {
                                   style: TextStyle(fontSize: 13 * uiScale),
                                 ),
                               ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xl),
+                _SectionTitle(title: 'About', colors: colors, uiScale: uiScale),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: colors.surfacePanel,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Theme.of(context).brightness == Brightness.dark
+                              ? Border.all(color: colors.border)
+                              : null,
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.asset(
+                            'assets/icons/sheep_icon.png',
+                            width: 48,
+                            height: 48,
+                            errorBuilder: (context, error, stackTrace) =>
+                                Icon(Icons.note_alt_outlined, color: colors.inkPrimary, size: 48),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.md),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Sheep',
+                              style: TextStyle(color: colors.inkPrimary, fontSize: 16 * uiScale, fontWeight: FontWeight.bold),
+                            ),
+                            Text(
+                              'A minimal, distraction-free note-taking app.',
+                              style: TextStyle(color: colors.inkSecondary, fontSize: 13 * uiScale),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Built by Hardik Bansal',
+                              style: TextStyle(color: colors.inkMuted, fontSize: 12 * uiScale),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: Image.asset('assets/icons/github.png', width: 24, height: 24, color: colors.inkSecondary),
+                        tooltip: 'Source Code (GitHub)',
+                        color: colors.inkSecondary,
+                        onPressed: () async {
+                          final url = Uri.parse('https://github.com/hardikbansal31/sheep');
+                          if (await canLaunchUrl(url)) {
+                            await launchUrl(url);
+                          }
+                        },
                       ),
                     ],
                   ),
