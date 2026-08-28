@@ -2,15 +2,27 @@
 
 A beautiful, offline-first, distraction-free digital notebook designed for rapid text entry and structured note organization. Sheep strikes a perfect balance between a clean, content-first aesthetic and structured hierarchy—without the bloat.
 
-<p align="center">
-  <img src="imgs/1st.png" alt="Sheep Desktop" height="400" />
-  <img src="imgs/4th.png" alt="Sheep Mobile" height="400" />
-</p>
+<table>
+  <tr>
+    <td width="78.3%" align="center">
+      <img src="imgs/1st.png" alt="Sheep Desktop" width="100%" />
+    </td>
+    <td width="21.7%" align="center">
+      <img src="imgs/4th.png" alt="Sheep Mobile" width="100%" />
+    </td>
+  </tr>
+</table>
 
-<p align="center">
-  <img src="imgs/2nd.png" alt="Code Blocks & Tables" width="48%" />
-  <img src="imgs/3rd.png" alt="Headings & Checklists" width="48%" />
-</p>
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <img src="imgs/2nd.png" alt="Code Blocks & Tables" width="100%" />
+    </td>
+    <td width="50%" align="center">
+      <img src="imgs/3rd.png" alt="Headings & Checklists" width="100%" />
+    </td>
+  </tr>
+</table>
 
 ---
 
