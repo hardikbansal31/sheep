@@ -105,30 +105,27 @@ class _TrashContentState extends ConsumerState<_TrashContent> with SingleTickerP
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Row(
-              children: [
-                if (widget.isMobileWidth) ...[
-                  IconButton(
-                    icon: Icon(Icons.arrow_back, color: colors.inkPrimary),
-                    onPressed: () => Navigator.of(context).pop(),
-                    splashRadius: 24,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                  const SizedBox(width: AppSpacing.md),
-                ],
-                Text(
-                  'Trash Bin',
-                  style: TextStyle(
-                    color: colors.inkPrimary,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+            if (widget.isMobileWidth) ...[
+              IconButton(
+                icon: Icon(Icons.arrow_back, color: colors.inkPrimary),
+                onPressed: () => Navigator.of(context).pop(),
+                splashRadius: 20,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+            ],
+            Text(
+              'Trash Bin',
+              style: TextStyle(
+                color: colors.inkPrimary,
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+              ),
             ),
+            const Spacer(),
             TextButton(
               onPressed: () => _emptyTrash(colors),
               style: TextButton.styleFrom(
@@ -146,7 +143,8 @@ class _TrashContentState extends ConsumerState<_TrashContent> with SingleTickerP
           controller: _tabController,
           indicatorColor: colors.accent,
           labelColor: colors.accent,
-          unselectedLabelColor: colors.inkMuted,
+          unselectedLabelColor: colors.inkSecondary,
+          dividerColor: colors.inkMuted,
           tabs: const [
             Tab(text: 'Sections'),
             Tab(text: 'Pages'),
@@ -182,7 +180,7 @@ class _DeletedSectionsView extends ConsumerWidget {
         }
         return ListView.separated(
           itemCount: sections.length,
-          separatorBuilder: (context, index) => Divider(color: colors.border, height: 1),
+          separatorBuilder: (context, index) => Divider(color: colors.inkMuted, height: 1),
           itemBuilder: (context, index) {
             final section = sections[index];
             return ListTile(
@@ -221,7 +219,7 @@ class _DeletedPagesView extends ConsumerWidget {
         }
         return ListView.separated(
           itemCount: pages.length,
-          separatorBuilder: (context, index) => Divider(color: colors.border, height: 1),
+          separatorBuilder: (context, index) => Divider(color: colors.inkMuted, height: 1),
           itemBuilder: (context, index) {
             final page = pages[index];
             return ListTile(

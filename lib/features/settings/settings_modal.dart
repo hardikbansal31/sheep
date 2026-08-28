@@ -95,16 +95,17 @@ class _SettingsContentState extends ConsumerState<_SettingsContent> {
       mainAxisSize: widget.isMobileWidth ? MainAxisSize.max : MainAxisSize.min,
       children: [
         Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             if (widget.isMobileWidth) ...[
               IconButton(
                 icon: Icon(Icons.arrow_back, color: colors.inkPrimary),
                 onPressed: () => Navigator.of(context).pop(),
-                splashRadius: 24,
+                splashRadius: 20,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
               ),
-              const SizedBox(width: AppSpacing.md),
+              const SizedBox(width: AppSpacing.sm),
             ],
             Text(
               'Settings',
@@ -118,6 +119,9 @@ class _SettingsContentState extends ConsumerState<_SettingsContent> {
             IconButton(
               icon: Icon(Icons.delete_outline_rounded, color: colors.inkSecondary),
               tooltip: 'Trash Bin',
+              splashRadius: 20,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
               onPressed: () {
                 showDialog(
                   context: context,
