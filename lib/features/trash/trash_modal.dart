@@ -61,7 +61,7 @@ class _TrashContentState extends ConsumerState<_TrashContent> with SingleTickerP
     super.dispose();
   }
 
-  Future<void> _emptyTrash(BuildContext context, AppColors colors) async {
+  Future<void> _emptyTrash(AppColors colors) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -130,7 +130,7 @@ class _TrashContentState extends ConsumerState<_TrashContent> with SingleTickerP
               ],
             ),
             TextButton(
-              onPressed: () => _emptyTrash(context, colors),
+              onPressed: () => _emptyTrash(colors),
               style: TextButton.styleFrom(
                 foregroundColor: Colors.red,
                 shape: RoundedRectangleBorder(

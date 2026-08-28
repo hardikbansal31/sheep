@@ -14,7 +14,7 @@ final searchQueryProvider = NotifierProvider<SearchQuery, String>(
   SearchQuery.new,
 );
 
-final searchResultsProvider = FutureProvider<List<({String pageId, String title, String sectionName, String snippet})>>((ref) async {
+final searchResultsProvider = FutureProvider<List<({String pageId, String sectionId, String title, String sectionName, String snippet})>>((ref) async {
   final query = ref.watch(searchQueryProvider);
   if (query.trim().isEmpty) return [];
 
@@ -49,7 +49,7 @@ final searchResultsProvider = FutureProvider<List<({String pageId, String title,
 
   // Hydrate each result with live data from SyncRepository (PowerSync)
   final syncRepo = ref.read(syncRepoProvider);
-  final hydrated = <({String pageId, String title, String sectionName, String snippet})>[];
+  final hydrated = <({String pageId, String sectionId, String title, String sectionName, String snippet})>[];
 
   // Cache section lookups to avoid repeated queries
   final sectionCache = <String, String?>{};
@@ -72,6 +72,7 @@ final searchResultsProvider = FutureProvider<List<({String pageId, String title,
 
     hydrated.add((
       pageId: raw.pageId,
+      sectionId: page.sectionId,
       title: page.title,
       sectionName: sectionName,
       snippet: raw.snippet,

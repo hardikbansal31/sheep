@@ -35,7 +35,7 @@ void main(List<String> args) async {
       'jsonrpc': '2.0',
       'id': reqId,
       'method': method,
-      if (params != null) 'params': params,
+      'params': ?params,
     }));
     return completer.future;
   }

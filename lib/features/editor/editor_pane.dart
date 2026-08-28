@@ -467,29 +467,7 @@ class EditorPaneState extends ConsumerState<EditorPane> {
       _editorScrollController = newScrollController;
       _currentlyLoadedPageId = page.id;
     });
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        final rootChildren = newEditorState.document.root.children;
-        if (rootChildren.length > 1) {
-          final firstBodyNode = rootChildren[1];
-          newEditorState.updateSelectionWithReason(
-            Selection.collapsed(Position(path: firstBodyNode.path, offset: 0)),
-            reason: SelectionUpdateReason.uiEvent,
-          );
-        } else if (rootChildren.isNotEmpty) {
-          final titleNode = rootChildren.first;
-          final length = titleNode.delta?.length ?? 0;
-          newEditorState.updateSelectionWithReason(
-            Selection.collapsed(Position(path: titleNode.path, offset: length)),
-            reason: SelectionUpdateReason.uiEvent,
-          );
-        }
-      }
-    });
   }
-
-
 
   CommandShortcutEvent get _customPasteCommand {
     return CommandShortcutEvent(

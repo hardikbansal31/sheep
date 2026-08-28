@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_theme.dart';
+import '../layout/providers.dart';
 import '../pages/providers.dart';
+import '../sections/providers.dart';
 import 'providers.dart';
 
 class SearchModal extends ConsumerStatefulWidget {
@@ -25,15 +27,19 @@ class _SearchModalState extends ConsumerState<SearchModal> {
   Widget build(BuildContext context) {
     final colors = AppTheme.colorsOf(context);
     final resultsAsync = ref.watch(searchResultsProvider);
+    final isMobile = MediaQuery.of(context).size.width < 760;
 
     return Dialog(
       backgroundColor: Colors.transparent,
       elevation: 0,
-      insetPadding: const EdgeInsets.all(24),
+      insetPadding: EdgeInsets.all(isMobile ? 12 : 24),
       alignment: Alignment.topCenter,
       child: Container(
         width: 600,
-        margin: const EdgeInsets.only(top: 48),
+        margin: EdgeInsets.only(top: isMobile ? 16 : 48),
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * (isMobile ? 0.85 : 0.7),
+        ),
         decoration: BoxDecoration(
           color: colors.surfacePanel,
           borderRadius: BorderRadius.circular(12),
@@ -90,7 +96,9 @@ class _SearchModalState extends ConsumerState<SearchModal> {
                         final result = results[index];
                         return ListTile(
                           onTap: () {
+                            ref.read(activeSectionProvider.notifier).select(result.sectionId);
                             ref.read(activePageProvider.notifier).select(result.pageId);
+                            ref.read(mobileNavIndexProvider.notifier).go(2);
                             // Clear query state so it's fresh next time
                             ref.read(searchQueryProvider.notifier).clear();
                             Navigator.of(context).pop();

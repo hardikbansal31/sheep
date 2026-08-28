@@ -6,6 +6,7 @@ import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../editor/editor_pane.dart';
 import '../pages/providers.dart';
+import '../search/search_modal.dart';
 import '../sections/providers.dart';
 import '../settings/settings_modal.dart';
 import '../sync/sync_status_dot.dart';
@@ -90,7 +91,18 @@ class _MobileShellState extends ConsumerState<MobileShell> {
           const _LockResetButton(),
           if (index == 0) ...[
             IconButton(
+              icon: Icon(Icons.search, color: colors.inkSecondary),
+              tooltip: 'Search',
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (context) => const SearchModal(),
+                );
+              },
+            ),
+            IconButton(
               icon: Icon(Icons.settings_outlined, color: colors.inkSecondary),
+              tooltip: 'Settings',
               onPressed: () {
                 showDialog(
                   context: context,
