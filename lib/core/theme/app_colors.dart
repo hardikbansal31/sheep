@@ -27,12 +27,12 @@ class AppColors {
 
   /// Dark theme (default) — matched to color-picker sampled values.
   static const dark = AppColors._(
-    surfaceBase: Color(0xFF1C1C1C), // editor/content background — sampled
+    surfaceBase: Color(0xFF151515), // editor/content background — sampled
     surfacePanel: Color(0xFF20201F), // sidebar — updated sample
     surfaceHover: Color(
       0xFF2A2A29,
     ), // one step lighter than panel, for hover/active states
-    inkPrimary: Color(0xFFEDEDED), // near-white, neutral
+    inkPrimary: Color(0xFFF0EFEC), // near-white, neutral
     inkSecondary: Color(0xFF8C8C8C), // muted gray for secondary text/labels
     inkMuted: Color(0xFF5A5A5A), // placeholder/disabled text
     border: Color(0xFF2A2A29), // matches surfaceHover for consistency
