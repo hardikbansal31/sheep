@@ -25,27 +25,48 @@ class AppColors {
   final Color border;
   final Color accent;
 
-  /// Dark theme (default).
+  /// Dark theme (default) — matched to color-picker sampled values.
   static const dark = AppColors._(
-    surfaceBase: Color(0xFF1E1E1C),
-    surfacePanel: Color(0xFF252523),
-    surfaceHover: Color(0xFF2E2E2B),
-    inkPrimary: Color(0xFFF0EDE8),
-    inkSecondary: Color(0xFF8A8680),
-    inkMuted: Color(0xFF565350),
-    border: Color(0xFF2E2E2B),
+    surfaceBase: Color(0xFF1C1C1C), // editor/content background — sampled
+    surfacePanel: Color(0xFF20201F), // sidebar — updated sample
+    surfaceHover: Color(
+      0xFF2A2A29,
+    ), // one step lighter than panel, for hover/active states
+    inkPrimary: Color(0xFFEDEDED), // near-white, neutral
+    inkSecondary: Color(0xFF8C8C8C), // muted gray for secondary text/labels
+    inkMuted: Color(0xFF5A5A5A), // placeholder/disabled text
+    border: Color(0xFF2A2A29), // matches surfaceHover for consistency
     accent: Color(0xFFE8652A),
   );
 
-  /// Light theme.
+  /// Light theme — neutral gray family, matching the dark theme's tonal approach.
   static const light = AppColors._(
-    surfaceBase: Color(0xFFF9F8F5),
-    surfacePanel: Color(0xFFF0EDE8),
-    surfaceHover: Color(0xFFE8E4DE),
-    inkPrimary: Color(0xFF1C1C1A),
-    inkSecondary: Color(0xFF6B6860),
-    inkMuted: Color(0xFFA8A49E),
-    border: Color(0xFFE2DDD7),
-    accent: Color(0xFFCC5500),
+    surfaceBase: Color(0xFFFAFAFA), // main content background
+    surfacePanel: Color(0xFFF0F0EF), // sidebar — slightly darker than base
+    surfaceHover: Color(
+      0xFFE6E6E4,
+    ), // one step darker than panel, for hover/active states
+    inkPrimary: Color(
+      0xFF1C1C1C,
+    ), // near-black, mirrors dark theme's surfaceBase
+    inkSecondary: Color(0xFF6B6B6B), // muted gray for secondary text/labels
+    inkMuted: Color(0xFFA3A3A1), // placeholder/disabled text
+    border: Color(0xFFE6E6E4), // matches surfaceHover for consistency
+    accent: Color(0xFFE8652A),
+  );
+
+  /// OLED theme — true black base for power savings / max contrast.
+  /// Panels stay a hair off-black so pane edges are still legible.
+  static const oled = AppColors._(
+    surfaceBase: Color(0xFF000000), // true black
+    surfacePanel: Color(
+      0xFF0E0E0D,
+    ), // sidebar — same proportional step as dark theme
+    surfaceHover: Color(0xFF181817), // one step lighter than panel
+    inkPrimary: Color(0xFFEDEDED), // matches dark theme
+    inkSecondary: Color(0xFF8C8C8C), // matches dark theme
+    inkMuted: Color(0xFF5A5A5A), // matches dark theme
+    border: Color(0xFF181817), // matches surfaceHover for consistency
+    accent: Color(0xFFE8652A),
   );
 }
